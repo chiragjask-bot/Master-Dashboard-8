@@ -52,7 +52,7 @@ st.set_page_config(page_title="Financial File Merger & Formatter", layout="wide"
 if not check_login():
     st.stop()
 
-st.title("📊 Financial Data File Merger & Formatter8")
+st.title("📊 Financial Data File Merger & Formatter")
 st.markdown('<div id="main_tab"></div>', unsafe_allow_html=True)
 
 
@@ -115,6 +115,70 @@ def default_removals_for(tab, cols):
         return []
     normalized_wanted = {w.strip().lower() for w in wanted}
     return [c for c in cols if str(c).strip().lower() in normalized_wanted]
+
+
+# 1c. Default active/scrolled-to cell for each tab when the workbook is opened in Excel.
+#     Anything not listed here defaults to "A1" (row 0, col 0 — top-left corner).
+DEFAULT_VIEW_CELL = {
+    "Eligible_T0_Securities": "B3",
+    "mrg_trading": "A11",
+}
+
+
+def get_default_view_cell(tab):
+    return DEFAULT_VIEW_CELL.get(tab, "A1")
+
+
+def render_column_sequencer(state_key, current_columns, allow_delete=False, protected=None, label="Column order"):
+    """Renders a pick + ◀ Move Left / Move Right ▶ (+ optional 🗑 Delete) control.
+    Order (and deletions) persist in st.session_state[state_key] across reruns.
+    Returns the ordered list of column names to use for output.
+    """
+    protected = protected or []
+
+    if state_key not in st.session_state:
+        st.session_state[state_key] = list(current_columns)
+    order = st.session_state[state_key]
+
+    # Keep in sync with the current column set: drop stale entries, append new ones.
+    order = [c for c in order if c in current_columns]
+    for c in current_columns:
+        if c not in order:
+            order.append(c)
+    st.session_state[state_key] = order
+
+    if not order:
+        return order
+
+    st.caption(f"🔀 {label} — pick a column, then move it left/right" + (" or delete it:" if allow_delete else ":"))
+    pick_col, left_col, right_col, del_col = st.columns([3, 1, 1, 1])
+    with pick_col:
+        pick = st.selectbox(label, options=order, key=f"{state_key}_pick", label_visibility="collapsed")
+    with left_col:
+        if st.button("◀ Left", key=f"{state_key}_left"):
+            i = order.index(pick)
+            if i > 0:
+                order[i - 1], order[i] = order[i], order[i - 1]
+                st.session_state[state_key] = order
+                st.rerun()
+    with right_col:
+        if st.button("Right ▶", key=f"{state_key}_right"):
+            i = order.index(pick)
+            if i < len(order) - 1:
+                order[i + 1], order[i] = order[i], order[i + 1]
+                st.session_state[state_key] = order
+                st.rerun()
+    if allow_delete:
+        with del_col:
+            disabled = pick in protected
+            if st.button("🗑 Delete", key=f"{state_key}_del", disabled=disabled,
+                         help="This column is required and can't be deleted" if disabled else None):
+                order.remove(pick)
+                st.session_state[state_key] = order
+                st.rerun()
+
+    st.caption(" → ".join(order))
+    return order
 
 
 # 2. Strict Custom Numeric Formatting Strings Configuration
@@ -317,14 +381,20 @@ def md_build_master_dashboard(wb):
     return df, log
 
 
-def md_write_master_sheet(wb, df):
-    """Adds/overwrites Master_Dashboard-8 directly on the same workbook object."""
+def md_write_master_sheet(wb, df, column_order=None):
+    """Adds/overwrites Master_Dashboard-8 directly on the same workbook object.
+    column_order: optional list of field labels (subset/reordered) controlling
+    which columns appear and in what order. Defaults to the full MASTER_FIELD_MAP."""
     if MASTER_SHEET_NAME in wb.sheetnames:
         del wb[MASTER_SHEET_NAME]
     ws = wb.create_sheet(MASTER_SHEET_NAME)
 
-    labels = list(df.columns)
-    formats = [MASTER_NUMBER_FORMATS.get(f["format"], "@") for f in MASTER_FIELD_MAP]
+    field_lookup = {f["label"]: f for f in MASTER_FIELD_MAP}
+    labels = [l for l in (column_order or list(df.columns)) if l in field_lookup]
+    if not labels:
+        labels = list(df.columns)
+    df = df[labels]
+    formats = [MASTER_NUMBER_FORMATS.get(field_lookup[l]["format"], "@") for l in labels]
 
     header_fill = PatternFill(start_color=MASTER_HIGHLIGHT_COLOR, end_color=MASTER_HIGHLIGHT_COLOR, fill_type="solid")
     bold_font = Font(name="Arial", bold=True)
@@ -853,6 +923,14 @@ if all_candidate_files:
                     if rows_to_drop:
                         df_cleaned = df_cleaned.drop(index=sorted(rows_to_drop)).reset_index(drop=True)
 
+                    seq_order = render_column_sequencer(
+                        f"colorder_{tab}",
+                        df_cleaned.columns.tolist(),
+                        allow_delete=False,
+                        label=f"Column order for {tab}",
+                    )
+                    df_cleaned = df_cleaned[seq_order]
+
                     processed_dataframes[tab] = df_cleaned
                     st.caption(f"Rows: {len(df)} original → {len(df_cleaned)} after cleanup")
                     st.dataframe(df_cleaned.head(10), use_container_width=True)
@@ -909,6 +987,22 @@ if all_candidate_files:
                                     st.markdown(text)
                             except Exception as e:
                                 st.error(f"AI analysis failed for {tab}: {e}")
+
+        st.markdown("---")
+        st.subheader("🔀 Master_Dashboard-8 — column order & inclusion")
+        st.caption(
+            "Master_Dashboard-8's columns come from a fixed field list, not from your "
+            "uploads, so you can sequence them any time. Move columns left/right to "
+            "change their order in the final sheet, or delete ones you don't want. "
+            "'Symbol' is the join key and can't be deleted."
+        )
+        master_col_order = render_column_sequencer(
+            "master_col_order",
+            [f["label"] for f in MASTER_FIELD_MAP],
+            allow_delete=True,
+            protected=["Symbol"],
+            label="Master_Dashboard-8 columns",
+        )
 
         st.markdown("---")
 
@@ -1060,13 +1154,23 @@ if all_candidate_files:
                         last_col_letter = worksheet.cell(row=header_row, column=len(df_target.columns)).column_letter
                         worksheet.auto_filter.ref = f"A{header_row}:{last_col_letter}{worksheet.max_row}"
 
+                        # Default cell this tab opens/scrolls to in Excel (A1 unless overridden above).
+                        view_cell = get_default_view_cell(tab)
+                        worksheet.sheet_view.topLeftCell = view_cell
+                        if worksheet.sheet_view.selection:
+                            worksheet.sheet_view.selection[0].activeCell = view_cell
+                            worksheet.sheet_view.selection[0].sqref = view_cell
+
                 # -----------------------------------------------------------------
                 # Auto-build Master_Dashboard-8 by default — no extra click needed.
                 # Reads straight off writer.book, which already holds every tab
                 # just written above, and appends the joined sheet to it.
                 # -----------------------------------------------------------------
                 master_df, master_log = md_build_master_dashboard(writer.book)
-                md_write_master_sheet(writer.book, master_df)
+                active_master_order = st.session_state.get(
+                    "master_col_order", [f["label"] for f in MASTER_FIELD_MAP]
+                )
+                md_write_master_sheet(writer.book, master_df, column_order=active_master_order)
 
             st.success("✅ Consolidation and Formatting Complete!")
 
@@ -1077,11 +1181,11 @@ if all_candidate_files:
 
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Master_Dashboard-8 Symbols", len(master_df))
-            m2.metric("Columns", len(master_df.columns))
+            m2.metric("Columns", len(active_master_order))
             if "Symbol" in master_df.columns:
                 m3.metric("Duplicate Symbols", int(master_df["Symbol"].duplicated().sum()))
                 m4.metric("Blank Symbols", int((master_df["Symbol"].astype(str).str.strip() == "").sum()))
-            st.dataframe(master_df.head(20), use_container_width=True)
+            st.dataframe(master_df[active_master_order].head(20), use_container_width=True)
 
             st.download_button(
                 label="📥 Download Formatted Master File",
