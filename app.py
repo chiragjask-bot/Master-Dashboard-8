@@ -117,16 +117,19 @@ def default_removals_for(tab, cols):
     return [c for c in cols if str(c).strip().lower() in normalized_wanted]
 
 
-# 1c. Default active/scrolled-to cell for each tab when the workbook is opened in Excel.
-#     Anything not listed here defaults to "A1" (row 0, col 0 — top-left corner).
-DEFAULT_VIEW_CELL = {
+# 1c. Default "start cell" for each tab — this is the single source of truth for
+#     both (a) the "Start cell for {tab}" data-crop input's default value, and
+#     (b) which cell the tab opens/scrolls to in Excel. Anything not listed here
+#     defaults to blank / "A1" ("zero zero" — the normal top-left start).
+DEFAULT_START_CELLS = {
+    "MA": "B9",
     "Eligible_T0_Securities": "B3",
     "mrg_trading": "A11",
 }
 
 
 def get_default_view_cell(tab):
-    return DEFAULT_VIEW_CELL.get(tab, "A1")
+    return DEFAULT_START_CELLS.get(tab, "A1")
 
 
 def render_column_sequencer(state_key, current_columns, allow_delete=False, protected=None, label="Column order"):
@@ -178,6 +181,52 @@ def render_column_sequencer(state_key, current_columns, allow_delete=False, prot
                 st.rerun()
 
     st.caption(" → ".join(order))
+
+    # ---- Additional sequence box: type the exact order, comma-separated ----
+    type_col, apply_col = st.columns([5, 1])
+    with type_col:
+        typed = st.text_input(
+            "Or type the exact sequence here (comma-separated column names), then Apply:",
+            key=f"{state_key}_typed",
+            placeholder=", ".join(order),
+        )
+    with apply_col:
+        st.write("")
+        apply_clicked = st.button("Apply", key=f"{state_key}_apply")
+
+    if apply_clicked:
+        typed_names = [t.strip() for t in typed.split(",") if t.strip()]
+        if not typed_names:
+            st.warning("Type at least one column name before clicking Apply.")
+        else:
+            lookup = {c.strip().lower(): c for c in order}
+            matched, unmatched = [], []
+            for name in typed_names:
+                actual = lookup.get(name.strip().lower())
+                if actual and actual not in matched:
+                    matched.append(actual)
+                elif not actual:
+                    unmatched.append(name)
+
+            if not allow_delete:
+                # Non-deletable sequencers: anything left unmentioned is appended
+                # at the end rather than dropped, so no data silently disappears.
+                for c in order:
+                    if c not in matched:
+                        matched.append(c)
+            else:
+                # Deletable sequencers: protected columns are kept even if the
+                # person forgot to type them; everything else not typed is dropped.
+                for c in protected:
+                    if c in order and c not in matched:
+                        matched.append(c)
+
+            if unmatched:
+                st.warning(f"Not found (ignored): {', '.join(unmatched)}")
+            if matched:
+                st.session_state[state_key] = matched
+                st.rerun()
+
     return order
 
 
@@ -833,9 +882,10 @@ if all_candidate_files:
             if tab in valid_files_map:
                 f = valid_files_map[tab]
 
-                # "Zero Zero" start-cell override — MA defaults to B9 as a special case;
-                # every other tab defaults to blank (normal A1 start) unless the person sets one.
-                st.session_state.setdefault(f"start_cell_{tab}", "B9" if tab == "MA" else "")
+                # "Zero Zero" start-cell override — some tabs default to a specific
+                # start cell as a special case; every other tab defaults to blank
+                # (normal A1 / "zero zero" start) unless the person sets one.
+                st.session_state.setdefault(f"start_cell_{tab}", DEFAULT_START_CELLS.get(tab, ""))
                 start_cell_value = st.session_state.get(f"start_cell_{tab}", "")
                 start_row_number, start_col_index = parse_start_cell(start_cell_value)
 
