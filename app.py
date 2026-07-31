@@ -47,7 +47,7 @@ def check_login():
     return False
 
 
-st.set_page_config(page_title="Financial File Merger & Formatter8", layout="wide")
+st.set_page_config(page_title="Financial File Merger & Formatter", layout="wide")
 
 if not check_login():
     st.stop()
@@ -382,6 +382,13 @@ MASTER_NUMBER_FORMATS = {
 }
 
 
+def get_active_master_field_map():
+    """MASTER_FIELD_MAP plus any custom columns the person has added via the
+    'Add a column from any tab' box in the UI. Custom columns live only in
+    st.session_state for this session — nothing is written back to this file."""
+    return MASTER_FIELD_MAP + st.session_state.get("custom_master_fields", [])
+
+
 def md_normalize_header(text) -> str:
     if text is None:
         return ""
@@ -422,16 +429,19 @@ def md_match_column(header_index: dict, aliases: list) -> int:
     return -1
 
 
-def md_build_master_dashboard(wb):
+def md_build_master_dashboard(wb, field_map=None):
     """wb is an openpyxl Workbook already holding the freshly consolidated tabs
-    (values, not formulas — safe to read cell.value directly, no data_only reload needed)."""
+    (values, not formulas — safe to read cell.value directly, no data_only reload needed).
+    field_map: optional field list to use instead of the base MASTER_FIELD_MAP — pass
+    get_active_master_field_map() to include any custom columns the user has added."""
+    field_map = field_map if field_map is not None else MASTER_FIELD_MAP
     all_aliases = list(MASTER_SYMBOL_ALIASES)
-    for f in MASTER_FIELD_MAP:
+    for f in field_map:
         all_aliases += f["aliases"]
     all_aliases_norm = {md_normalize_header(a) for a in all_aliases}
 
     fields_by_sheet = {}
-    for f in MASTER_FIELD_MAP:
+    for f in field_map:
         fields_by_sheet.setdefault(f["sheet"], []).append(f)
 
     master_data = {}
@@ -476,21 +486,24 @@ def md_build_master_dashboard(wb):
                     master_data[symbol][label] = val
 
     symbol_order = sorted(symbol_order)
-    labels = [f["label"] for f in MASTER_FIELD_MAP]
+    labels = [f["label"] for f in field_map]
     rows = [[master_data[s].get(l, "") for l in labels] for s in symbol_order]
     df = pd.DataFrame(rows, columns=labels)
     return df, log
 
 
-def md_write_master_sheet(wb, df, column_order=None):
+def md_write_master_sheet(wb, df, column_order=None, field_map=None):
     """Adds/overwrites Master_Dashboard-8 directly on the same workbook object.
     column_order: optional list of field labels (subset/reordered) controlling
-    which columns appear and in what order. Defaults to the full MASTER_FIELD_MAP."""
+    which columns appear and in what order. Defaults to the full field_map.
+    field_map: optional field list to use instead of the base MASTER_FIELD_MAP — pass
+    get_active_master_field_map() to include any custom columns the user has added."""
+    field_map = field_map if field_map is not None else MASTER_FIELD_MAP
     if MASTER_SHEET_NAME in wb.sheetnames:
         del wb[MASTER_SHEET_NAME]
     ws = wb.create_sheet(MASTER_SHEET_NAME)
 
-    field_lookup = {f["label"]: f for f in MASTER_FIELD_MAP}
+    field_lookup = {f["label"]: f for f in field_map}
     labels = [l for l in (column_order or list(df.columns)) if l in field_lookup]
     if not labels:
         labels = list(df.columns)
@@ -799,6 +812,91 @@ if uploaded_zips:
         f"file(s) from {len(uploaded_zips)} zip archive(s), including nested zip/gz files."
     )
 
+st.markdown("---")
+st.subheader("📎 Add a custom tab from any Excel/CSV file")
+st.caption(
+    "Upload any file that doesn't match one of the fixed tab names above and give it "
+    "its own tab name. You can add as many of these as you like, rename any of them "
+    "at any time, and their columns can be pulled into Master_Dashboard-8 the same "
+    "way as the built-in tabs."
+)
+st.session_state.setdefault("custom_tabs", [])  # list of {"name","filename","bytes"}
+st.session_state.setdefault("custom_tab_uploader_key", 0)
+
+new_tab_file = st.file_uploader(
+    "File for the new tab",
+    type=['csv', 'xlsx', 'xls'],
+    key=f"custom_tab_uploader_{st.session_state['custom_tab_uploader_key']}",
+)
+default_new_name = ""
+if new_tab_file is not None:
+    default_new_name = re.sub(r'\.(csv|xlsx|xls)$', '', new_tab_file.name, flags=re.IGNORECASE)
+new_tab_name_col, new_tab_btn_col = st.columns([3, 1])
+with new_tab_name_col:
+    new_tab_name = st.text_input(
+        "Tab name for this file", value=default_new_name, key="new_custom_tab_name"
+    )
+with new_tab_btn_col:
+    st.write("")
+    add_tab_clicked = st.button("➕ Add as new tab", key="add_custom_tab_btn")
+
+if add_tab_clicked:
+    name_clean = new_tab_name.strip()
+    existing_names = {t.lower() for t in TAB_SEQUENCE} | {
+        t["name"].strip().lower() for t in st.session_state["custom_tabs"]
+    }
+    if new_tab_file is None:
+        st.warning("Upload a file before adding it as a tab.")
+    elif not name_clean:
+        st.warning("Type a tab name before adding.")
+    elif name_clean.lower() in existing_names:
+        st.warning(f'"{name_clean}" is already a tab name — pick a different one.')
+    else:
+        st.session_state["custom_tabs"].append({
+            "name": name_clean,
+            "filename": new_tab_file.name,
+            "bytes": new_tab_file.getvalue(),
+        })
+        # Bump the uploader's key so the widget resets empty, ready for the next file.
+        st.session_state["custom_tab_uploader_key"] += 1
+        st.success(f'Added tab "{name_clean}" ({new_tab_file.name}).')
+        st.rerun()
+
+if st.session_state["custom_tabs"]:
+    st.caption("Custom tabs added so far — rename or remove any of them:")
+    for i, ct in enumerate(st.session_state["custom_tabs"]):
+        rc1, rc2 = st.columns([4, 1])
+        with rc1:
+            renamed = st.text_input(
+                f"Tab name (from {ct['filename']})",
+                value=ct["name"],
+                key=f"custom_tab_rename_{i}",
+            )
+            renamed_clean = renamed.strip()
+            if renamed_clean and renamed_clean != ct["name"]:
+                others = {t.lower() for t in TAB_SEQUENCE} | {
+                    t["name"].strip().lower()
+                    for j, t in enumerate(st.session_state["custom_tabs"]) if j != i
+                }
+                if renamed_clean.lower() in others:
+                    st.warning(f'"{renamed_clean}" is already used by another tab — not renamed.')
+                else:
+                    st.session_state["custom_tabs"][i]["name"] = renamed_clean
+        with rc2:
+            st.write("")
+            if st.button("🗑 Remove tab", key=f"custom_tab_remove_{i}"):
+                st.session_state["custom_tabs"].pop(i)
+                st.rerun()
+
+# Ready-to-use custom tab file map, keyed by (possibly renamed) tab name.
+custom_tab_files = {
+    ct["name"]: InMemoryFile(ct["filename"], ct["bytes"]) for ct in st.session_state["custom_tabs"]
+}
+CUSTOM_TAB_NAMES = list(custom_tab_files.keys())
+ALL_TABS = TAB_SEQUENCE + CUSTOM_TAB_NAMES
+
+st.markdown("---")
+
 # Active File Verification Status Dashboard
 st.subheader("📋 Sequence Checklist & Missing Files Audit")
 status_cols = st.columns(3)
@@ -825,6 +923,8 @@ for files in tab_candidates.values():
     files.sort(key=_candidate_sort_key)
 
 valid_files_map = {}
+# Custom tabs are unambiguous (one file, deliberately added) — register them directly.
+valid_files_map.update(custom_tab_files)
 
 for idx, tab in enumerate(TAB_SEQUENCE):
     col_to_use = status_cols[idx % 3]
@@ -850,6 +950,13 @@ for idx, tab in enumerate(TAB_SEQUENCE):
     else:
         col_to_use.markdown(f"**❌ {tab}** — <span style='color:#d9534f; font-weight:bold;'>Missing</span>", unsafe_allow_html=True)
 
+for idx, tab in enumerate(CUSTOM_TAB_NAMES):
+    col_to_use = status_cols[(len(TAB_SEQUENCE) + idx) % 3]
+    col_to_use.markdown(
+        f"**✅ {tab}** <small style='color:green;'>({custom_tab_files[tab].name} — custom tab)</small>",
+        unsafe_allow_html=True,
+    )
+
 st.markdown("---")
 
 # =====================================================================================
@@ -862,7 +969,7 @@ st.caption(
 )
 
 nav_cols = st.columns(3)
-for idx, tab in enumerate(TAB_SEQUENCE):
+for idx, tab in enumerate(ALL_TABS):
     nav_col = nav_cols[idx % 3]
     with nav_col:
         if tab in valid_files_map:
@@ -920,7 +1027,7 @@ for i, url in enumerate(st.session_state["custom_urls"]):
 
 st.markdown("---")
 
-if all_candidate_files:
+if all_candidate_files or custom_tab_files:
     if not valid_files_map:
         st.warning("⚠️ Bypassed all uploaded files. None of the file names match the required target criteria.")
     else:
@@ -930,7 +1037,7 @@ if all_candidate_files:
 
         st.subheader("🛠️ Component Tuning & Data Previews")
 
-        for tab in TAB_SEQUENCE:
+        for tab in ALL_TABS:
             if tab in valid_files_map:
                 f = valid_files_map[tab]
 
@@ -1092,16 +1199,76 @@ if all_candidate_files:
                                 st.error(f"AI analysis failed for {tab}: {e}")
 
         st.markdown("---")
+        st.subheader("➕ Add a column from any tab to Master_Dashboard-8")
+        st.caption(
+            "Master_Dashboard-8's default fields are the list below, but you can also pull "
+            "in any extra column from any tab. Pick the tab it lives on, type the exact "
+            "column name as it appears in that tab's file, optionally give it a shorter "
+            "label for Master_Dashboard-8, then Add. It's session-only — nothing is saved "
+            "back to this script."
+        )
+        add_tab_col, add_name_col, add_label_col = st.columns([2, 2, 2])
+        with add_tab_col:
+            master_col_tab = st.selectbox("Tab name", options=ALL_TABS, key="custom_field_tab")
+        with add_name_col:
+            custom_col_name = st.text_input(
+                "Column name (exact, from that tab)", key="custom_field_colname"
+            )
+        with add_label_col:
+            custom_label = st.text_input(
+                "Label in Master_Dashboard-8 (optional)", key="custom_field_label"
+            )
+        add_clicked = st.button("Add column", key="custom_field_add")
+
+        if add_clicked:
+            col_name_clean = custom_col_name.strip()
+            if not col_name_clean:
+                st.warning("Type the column name before clicking Add.")
+            else:
+                label_clean = custom_label.strip() or col_name_clean
+                existing_labels = {f["label"] for f in get_active_master_field_map()}
+                if label_clean in existing_labels:
+                    st.warning(
+                        f'"{label_clean}" is already a Master_Dashboard-8 column — '
+                        "pick a different label."
+                    )
+                else:
+                    st.session_state.setdefault("custom_master_fields", [])
+                    st.session_state["custom_master_fields"].append({
+                        "label": label_clean,
+                        "sheet": master_col_tab,
+                        "aliases": [col_name_clean],
+                        "format": "text",
+                    })
+                    # Stale sequencer order would otherwise hide the new column until
+                    # it's dropped and re-synced, so clear it and let it re-append.
+                    st.session_state.pop("master_col_order", None)
+                    st.success(f'Added "{label_clean}" (from {master_col_tab} → {col_name_clean}).')
+                    st.rerun()
+
+        custom_fields = st.session_state.get("custom_master_fields", [])
+        if custom_fields:
+            st.caption("Custom columns added so far:")
+            for i, f in enumerate(custom_fields):
+                c1, c2 = st.columns([5, 1])
+                c1.write(f'• **{f["label"]}** ← {f["sheet"]} → {f["aliases"][0]}')
+                if c2.button("🗑 Remove", key=f"custom_field_remove_{i}"):
+                    st.session_state["custom_master_fields"].pop(i)
+                    st.session_state.pop("master_col_order", None)
+                    st.rerun()
+
+        st.markdown("---")
         st.subheader("🔀 Master_Dashboard-8 — column order & inclusion")
         st.caption(
-            "Master_Dashboard-8's columns come from a fixed field list, not from your "
-            "uploads, so you can sequence them any time. Move columns left/right to "
-            "change their order in the final sheet, or delete ones you don't want. "
-            "'Symbol' is the join key and can't be deleted."
+            "Master_Dashboard-8's columns come from a fixed field list (plus any custom "
+            "columns you added above), not from your uploads, so you can sequence them "
+            "any time. Move columns left/right to change their order in the final sheet, "
+            "or delete ones you don't want. 'Symbol' is the join key and can't be deleted."
         )
+        active_field_map = get_active_master_field_map()
         master_col_order = render_column_sequencer(
             "master_col_order",
-            [f["label"] for f in MASTER_FIELD_MAP],
+            [f["label"] for f in active_field_map],
             allow_delete=True,
             protected=["Symbol"],
             label="Master_Dashboard-8 columns",
@@ -1116,7 +1283,7 @@ if all_candidate_files:
             LINK_FONT = Font(color="0563C1", underline="single", bold=True)
 
             with pd.ExcelWriter(output_stream, engine='openpyxl') as writer:
-                exportable_tabs = [t for t in TAB_SEQUENCE if t in processed_dataframes]
+                exportable_tabs = [t for t in ALL_TABS if t in processed_dataframes]
 
                 # --- Build the "Main Tab" hub sheet first, so it opens as sheet #1 ---
                 main_ws = writer.book.create_sheet(title="Main Tab")
@@ -1155,7 +1322,7 @@ if all_candidate_files:
                 for c_idx in range(4, 4 + max_col_count):
                     main_ws.column_dimensions[main_ws.cell(row=header_row_num, column=c_idx).column_letter].width = 22
 
-                for tab in TAB_SEQUENCE:
+                for tab in ALL_TABS:
                     if tab in processed_dataframes:
                         df_target = processed_dataframes[tab]
 
@@ -1269,11 +1436,14 @@ if all_candidate_files:
                 # Reads straight off writer.book, which already holds every tab
                 # just written above, and appends the joined sheet to it.
                 # -----------------------------------------------------------------
-                master_df, master_log = md_build_master_dashboard(writer.book)
+                exec_field_map = get_active_master_field_map()
+                master_df, master_log = md_build_master_dashboard(writer.book, field_map=exec_field_map)
                 active_master_order = st.session_state.get(
-                    "master_col_order", [f["label"] for f in MASTER_FIELD_MAP]
+                    "master_col_order", [f["label"] for f in exec_field_map]
                 )
-                md_write_master_sheet(writer.book, master_df, column_order=active_master_order)
+                md_write_master_sheet(
+                    writer.book, master_df, column_order=active_master_order, field_map=exec_field_map
+                )
 
             st.success("✅ Consolidation and Formatting Complete!")
 
