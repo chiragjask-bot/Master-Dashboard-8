@@ -52,7 +52,7 @@ st.set_page_config(page_title="Financial File Merger & Formatter", layout="wide"
 if not check_login():
     st.stop()
 
-st.title("📊 2nd type Data Formatter")
+st.title("📊 Financial Data File Merger & Formatter")
 st.markdown('<div id="main_tab"></div>', unsafe_allow_html=True)
 
 
@@ -107,6 +107,63 @@ DEFAULT_REMOVE_COLUMNS = {
 }
 
 
+# 1b-2. Default column *order* per tab, matching the raw layout each source file
+#       ships with. This only sets the sequencer's starting order — the person can
+#       still drag/move columns afterward. Tabs not listed here just keep whatever
+#       order the uploaded file has.
+DEFAULT_COLUMN_ORDER = {
+    "EQUITY_L": ["SYMBOL", "ISIN NUMBER", "NAME OF COMPANY", "SERIES", "DATE OF LISTING",
+                 "MARKET LOT", "PAID UP VALUE", "FACE VALUE"],
+    "SME_EQUITY_L": ["SYMBOL", "ISIN_NUMBER", "NAME_OF_COMPANY", "SERIES", "DATE_OF_LISTING",
+                     "PAID_UP_VALUE", "FACE_VALUE"],
+    "Eligible_T0_Securities": ["Symbol", "Name Of Company", "Series", "Effective Date"],
+    "pd": ["SYMBOL", "SECURITY", "SERIES", "PREV_CL_PR", "OPEN_PRICE", "HIGH_PRICE", "LOW_PRICE",
+           "CLOSE_PRICE", "NET_TRDVAL", "NET_TRDQTY", "TRADES", "HI_52_WK", "LO_52_WK"],
+    "pr": ["SECURITY", "PREV_CL_PR", "OPEN_PRICE", "HIGH_PRICE", "LOW_PRICE", "CLOSE_PRICE",
+           "NET_TRDVAL", "NET_TRDQTY", "TRADES", "HI_52_WK", "LO_52_WK", "IND_SEC", "CORP_IND"],
+    "bc": ["SYMBOL", "SECURITY", "SERIES", "PURPOSE", "RECORD_DT", "EX_DT"],
+    "tt": ["SECURITY", "NET_TRDVAL", "NET_TRDQTY", "PREV_CL_PR", "CLOSE_PRIC"],
+    "BhavCopy_NSE_CM": ["ISIN", "TckrSymb", "FinInstrmNm", "TtlTradgVol", "TtlTrfVal",
+                        "TtlNbOfTxsExctd", "PrvsClsgPric", "ClsPric", "LastPric", "OpnPric",
+                        "HghPric", "LwPric", "SttlmPric", "NewBrdLotQty", "Sgmt", "FinInstrmId",
+                        "Src", "SctySrs", "SsnId"],
+    "sec_bhavdata_full": ["SYMBOL", "SERIES", "DELIV_QTY", "DELIV_PER", "PREV_CLOSE",
+                          "CLOSE_PRICE", "TTL_TRD_QNTY", "TURNOVER_LACS", "NO_OF_TRADES",
+                          "OPEN_PRICE", "HIGH_PRICE", "LOW_PRICE", "LAST_PRICE", "AVG_PRICE", "DATE1"],
+    "sec_list": ["Symbol", "Security Name", "Series", "Band", "Remarks"],
+    "StocksTraded": ["Symbol", "LTP", "%chng", "Mkt Cap (₹ Crores)", "Volume (Lakhs)",
+                      "Value (₹ Crores)", "Series"],
+    "bulk": ["Symbol", "Security Name", "Client Name", "Buy/Sell", "Quantity Traded",
+             "Trade Price / Wght. Avg. Price", "Date", "Remarks"],
+    "CM_52_wk_High_low": ["SYMBOL", "Adjusted_52_Week_High", "52_Week_High_Date",
+                          "Adjusted_52_Week_Low", "52_Week_Low_DT", "SERIES"],
+    "eq_band_changes": ["Symbol", "Security Name", "Series", "From", "To"],
+}
+
+
+def default_order_for(tab, cols):
+    """Reorders this tab's actual columns to match the configured default sequence,
+    tolerating case/whitespace differences between the spec and the real header text.
+    Any columns not covered by the default sequence keep their original relative
+    order and are appended at the end, so nothing is ever silently dropped."""
+    wanted = DEFAULT_COLUMN_ORDER.get(tab)
+    if not wanted:
+        return list(cols)
+    lookup = {str(c).strip().lower(): c for c in cols}
+    ordered = []
+    used = set()
+    for w in wanted:
+        key = w.strip().lower()
+        match = lookup.get(key)
+        if match is not None and match not in used:
+            ordered.append(match)
+            used.add(match)
+    for c in cols:
+        if c not in used:
+            ordered.append(c)
+    return ordered
+
+
 def default_removals_for(tab, cols):
     """Matches the configured default-removal column names against the actual
     column names on this tab, tolerating case/whitespace differences."""
@@ -132,15 +189,19 @@ def get_default_view_cell(tab):
     return DEFAULT_START_CELLS.get(tab, "A1")
 
 
-def render_column_sequencer(state_key, current_columns, allow_delete=False, protected=None, label="Column order"):
+def render_column_sequencer(state_key, current_columns, allow_delete=False, protected=None,
+                             label="Column order", default_order=None):
     """Renders a pick + ◀ Move Left / Move Right ▶ (+ optional 🗑 Delete) control.
     Order (and deletions) persist in st.session_state[state_key] across reruns.
+    default_order: optional starting sequence (e.g. from DEFAULT_COLUMN_ORDER) used
+    only the first time this sequencer initializes; the person can still reorder
+    freely afterward. Falls back to current_columns as-is when not provided.
     Returns the ordered list of column names to use for output.
     """
     protected = protected or []
 
     if state_key not in st.session_state:
-        st.session_state[state_key] = list(current_columns)
+        st.session_state[state_key] = list(default_order) if default_order else list(current_columns)
     order = st.session_state[state_key]
 
     # Keep in sync with the current column set: drop stale entries, append new ones.
@@ -256,48 +317,41 @@ MASTER_SYMBOL_ALIASES = ["SYMBOL", "TckrSymb", "Symb", "Symbol"]
 
 MASTER_FIELD_MAP = [
     {"label": "Symbol", "sheet": "BhavCopy_NSE_CM", "aliases": ["TckrSymb", "SYMBOL", "Symb"], "format": "text", "isKey": True},
-
-    {"label": "Series", "sheet": "BhavCopy_NSE_CM", "aliases": ["SctySrs", "SERIES", "Series", "Srs"], "format": "text"},
     {"label": "ISIN", "sheet": "BhavCopy_NSE_CM", "aliases": ["ISIN", "ISIN NUMBER"], "format": "text"},
+    {"label": "Series", "sheet": "BhavCopy_NSE_CM", "aliases": ["SctySrs", "SERIES", "Series", "Srs"], "format": "text"},
     {"label": "Company Name (Capital)", "sheet": "BhavCopy_NSE_CM",
      "aliases": ["FinInstrmNm", "NAME OF COMPANY", "Name Of Company", "Security Name", "SECURITY", "Security",
                  "COMPANY NAME", "COMPANY'S NAME", "Company Name", "Company's Name"], "format": "text"},
+    {"label": "Company Name", "sheet": "EQUITY_L",
+     "aliases": ["NAME OF COMPANY", "Name Of Company", "Security Name", "SECURITY", "Security",
+                 "COMPANY NAME", "COMPANY'S NAME", "Company Name", "Company's Name"], "format": "text"},
+    {"label": "Date of Listing", "sheet": "EQUITY_L", "aliases": ["DATE OF LISTING"], "format": "date"},
     {"label": "Trade Date", "sheet": "BhavCopy_NSE_CM", "aliases": ["TradDt", "Trade Date"], "format": "date"},
     {"label": "Segment", "sheet": "BhavCopy_NSE_CM", "aliases": ["Src"], "format": "text"},
+    {"label": "Delivery %", "sheet": "sec_bhavdata_full",
+     "aliases": ["DELIV PER", "DELIV %", "delivery percentage", "Delivery Percentage (%)", "DELIV_PER"], "format": "percent"},
+    {"label": "% Change", "sheet": "StocksTraded", "aliases": ["%chng", "% Change"], "format": "percent"},
     {"label": "Close Price", "sheet": "BhavCopy_NSE_CM", "aliases": ["ClsPric", "CLOSE PRICE", "Close Price", "CLOSE_PRICE"], "format": "price"},
     {"label": "CMP/LTP", "sheet": "BhavCopy_NSE_CM", "aliases": ["LastPric", "LAST PRICE", "Last Price", "LTP", "LAST_PRICE"], "format": "price"},
     {"label": "Prev Close", "sheet": "BhavCopy_NSE_CM", "aliases": ["PrvsClsgPric", "PREV CLOSE", "Previous close", "PREV_CL_PR", "PREV_CLOSE"], "format": "price"},
     {"label": "Open (Rs.)", "sheet": "BhavCopy_NSE_CM", "aliases": ["OpnPric", "Open Price", "OPEN PRICE", "OPEN_PRICE"], "format": "price"},
     {"label": "High (Rs.)", "sheet": "BhavCopy_NSE_CM", "aliases": ["HghPric", "HIGH PRICE", "High Price", "HIGH_PRICE"], "format": "price"},
     {"label": "Low (Rs.)", "sheet": "BhavCopy_NSE_CM", "aliases": ["LwPric", "Low Price", "LOW PRICE", "LOW_PRICE"], "format": "price"},
-    {"label": "Traded Qty", "sheet": "BhavCopy_NSE_CM",
-     "aliases": ["TtlTradgVol", "TTL TRD QNTY", "TRADED QUANTITY", "NET_TRDQTY", "Traded Qty", "NET TRD QTY", "NET TRDQTY", "TTL_TRD_QNTY"], "format": "qty"},
     {"label": "Turnover (Rs.)", "sheet": "BhavCopy_NSE_CM",
      "aliases": ["TtlTrfVal", "NET_TRDVAL", "NET_TRD_VAL", "NET TRD VAL", "NET TRDVAL", "Turnover (Rs.)", "NET TRADED VALUE", "Net Traded Value", "Traded Value"], "format": "qty"},
+    {"label": "Traded Qty", "sheet": "BhavCopy_NSE_CM",
+     "aliases": ["TtlTradgVol", "TTL TRD QNTY", "TRADED QUANTITY", "NET_TRDQTY", "Traded Qty", "NET TRD QTY", "NET TRDQTY", "TTL_TRD_QNTY"], "format": "qty"},
     {"label": "No. of Trades", "sheet": "BhavCopy_NSE_CM", "aliases": ["TtlNbOfTxsExctd", "No. of Trades", "NO OF TRADES", "TRADES", "Trade", "NO_OF_TRADES"], "format": "qty"},
     {"label": "Market Lot", "sheet": "BhavCopy_NSE_CM", "aliases": ["NewBrdLotQty", "MARKET LOT", "Market Lot"], "format": "qty"},
-
-    {"label": "% Change", "sheet": "StocksTraded", "aliases": ["%chng", "% Change"], "format": "percent"},
     {"label": "Volume (Lakhs)", "sheet": "StocksTraded", "aliases": ["Volume (Lakhs)"], "format": "lakhs"},
     {"label": "Value (Rs. Crores)", "sheet": "StocksTraded", "aliases": ["Value (Rs Crores)", "Value (\u20b9 Crores)"], "format": "crores"},
     {"label": "Mkt Cap (Rs. Crores)", "sheet": "StocksTraded", "aliases": ["Mkt Cap (Rs Crores)", "Mkt Cap (\u20b9 Crores)", "Market Cap (\u20b9 Crores)"], "format": "crores"},
-
     {"label": "Market Cap (Rs.)", "sheet": "mcap", "aliases": ["Market Cap(Rs.)"], "format": "qty"},
     {"label": "Issue Size", "sheet": "mcap", "aliases": ["Issue Size"], "format": "qty"},
     {"label": "Category", "sheet": "mcap", "aliases": ["Category"], "format": "text"},
-
-    {"label": "Company Name", "sheet": "EQUITY_L",
-     "aliases": ["NAME OF COMPANY", "Name Of Company", "Security Name", "SECURITY", "Security",
-                 "COMPANY NAME", "COMPANY'S NAME", "Company Name", "Company's Name"], "format": "text"},
-    {"label": "Date of Listing", "sheet": "EQUITY_L", "aliases": ["DATE OF LISTING"], "format": "date"},
-    {"label": "Paid Up Value", "sheet": "EQUITY_L", "aliases": ["PAID UP VALUE"], "format": "price"},
     {"label": "Face Value", "sheet": "EQUITY_L", "aliases": ["FACE VALUE", "Face Value(Rs.)"], "format": "price"},
-
     {"label": "Delivery Qty", "sheet": "sec_bhavdata_full",
      "aliases": ["DELIV QTY", "DELIV QUANTITY", "Delivery quantity", "DELIVERY QNTY", "DELIV_QNTY", "DELIV QNTY", "DELIV_QTY"], "format": "qty"},
-    {"label": "Delivery %", "sheet": "sec_bhavdata_full",
-     "aliases": ["DELIV PER", "DELIV %", "delivery percentage", "Delivery Percentage (%)", "DELIV_PER"], "format": "percent"},
-
     {"label": "52W High", "sheet": "CM_52_wk_High_low",
      "aliases": ["Adjusted_52_Week_High", "52_Week_High", "52W_High", "52 Week High", "52W High", "HI_52_WK"], "format": "price"},
     {"label": "52W High Date", "sheet": "CM_52_wk_High_low",
@@ -306,15 +360,13 @@ MASTER_FIELD_MAP = [
      "aliases": ["Adjusted_52_Week_Low", "52 Week Low", "52_Week_Low", "52W_Low", "52W Low", "LO_52_WK"], "format": "price"},
     {"label": "52W Low Date", "sheet": "CM_52_wk_High_low",
      "aliases": ["52_Week_Low_DT", "52 Week Low Date", "52 W Low Date", "52 W Low Dt.", "52W Low Dt."], "format": "date"},
-
-    {"label": "T0 Tag", "sheet": "Eligible_T0_Securities", "aliases": ["SERIES", "SctySrs", "Srs", "Series"], "format": "text"},
-    {"label": "T0 Effective Date", "sheet": "Eligible_T0_Securities", "aliases": ["Effective Date"], "format": "text"},
-
-    {"label": "Band", "sheet": "sec_list", "aliases": ["Band"], "format": "number"},
-    {"label": "Remarks", "sheet": "sec_list", "aliases": ["Remarks"], "format": "text"},
-
     {"label": "Symbol P/E", "sheet": "PE", "aliases": ["SYMBOL P/E", "Symbol P/E"], "format": "ratio"},
     {"label": "Adjusted P/E", "sheet": "PE", "aliases": ["ADJUSTED P/E", "Adjusted P/E"], "format": "ratio"},
+    {"label": "T0 Tag", "sheet": "Eligible_T0_Securities", "aliases": ["SERIES", "SctySrs", "Srs", "Series"], "format": "text"},
+    {"label": "T0 Effective Date", "sheet": "Eligible_T0_Securities", "aliases": ["Effective Date"], "format": "text"},
+    {"label": "Band", "sheet": "sec_list", "aliases": ["Band"], "format": "number"},
+    {"label": "Remarks", "sheet": "sec_list", "aliases": ["Remarks"], "format": "text"},
+    {"label": "Paid Up Value", "sheet": "EQUITY_L", "aliases": ["PAID UP VALUE"], "format": "price"},
 ]
 
 MASTER_NUMBER_FORMATS = {
@@ -978,6 +1030,7 @@ if all_candidate_files:
                         df_cleaned.columns.tolist(),
                         allow_delete=False,
                         label=f"Column order for {tab}",
+                        default_order=default_order_for(tab, df_cleaned.columns.tolist()),
                     )
                     df_cleaned = df_cleaned[seq_order]
 
