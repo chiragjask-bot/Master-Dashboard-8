@@ -47,7 +47,7 @@ def check_login():
     return False
 
 
-st.set_page_config(page_title="Financial File Merger & Formatter", layout="wide")
+st.set_page_config(page_title="Financial File Merger & Formatter8", layout="wide")
 
 if not check_login():
     st.stop()
