@@ -8,7 +8,6 @@ import zipfile
 import gzip
 from datetime import datetime
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.formatting.rule import FormulaRule
 from openpyxl.worksheet.datavalidation import DataValidation
 
 # =====================================================================================
@@ -191,16 +190,11 @@ def get_default_view_cell(tab):
     return DEFAULT_START_CELLS.get(tab, "A1")
 
 
-# 1d. Explicit row-freeze overrides (feature request: "Row freeze problem").
-#     Value = the last row that should stay FROZEN/visible on screen while
-#     scrolling (rows 1..N stay put, everything from row N+1 down scrolls).
-#     Tabs not listed here just freeze through their own header row, computed
-#     automatically from wherever their header actually lands.
-CUSTOM_FREEZE_ROWS = {
-    "Eligible_T0_Securities": 3,
-    "MA": 10,
-    "mrg_trading": 12,
-}
+# 1d. Row-freeze note: every tab's header actually lands at the same row (row 2 —
+#     right after the "⬆️ Main Tab" nav row), regardless of the tab's own start
+#     cell, so freezing right after the header row (done generically below) is
+#     already correct for every tab. No per-tab override needed.
+CUSTOM_FREEZE_ROWS = {}
 
 # 1e. Which cell the "⬆️ Main Tab" jump-back link is written to, per tab.
 #     Defaults to A1; a couple of tabs were reported as needing it at B1 instead.
@@ -340,9 +334,10 @@ MASTER_HIGHLIGHT_COLOR = "EAD1DC"
 MASTER_HEADER_SCAN_ROWS = 15
 MASTER_SYMBOL_ALIASES = ["SYMBOL", "TckrSymb", "Symb", "Symbol"]
 # Safety cap: one Data Validation object is created per row for the Symbol
-# "box display" quick-view tooltip. Beyond this many rows the per-row tooltip
-# is skipped (file size/perf), but the full VBA pop-up card still works fine.
-MAX_BOX_DISPLAY_ROWS = 4000
+# "box display" quick-view tooltip. Benchmarked at ~6,000 rows in well under a
+# second and a tiny file-size increase, so this ceiling is just a sane backstop,
+# not a realistic limit for NSE-sized symbol lists.
+MAX_BOX_DISPLAY_ROWS = 20000
 
 MASTER_FIELD_MAP = [
     {"label": "Symbol", "sheet": "BhavCopy_NSE_CM", "aliases": ["TckrSymb", "SYMBOL", "Symb"], "format": "text", "isKey": True},
@@ -566,17 +561,6 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None):
     # Freeze BOTH the header row and the first column (feature request:
     # "freeze 1st column & 1st row in Tab Name: Master_Dashboard-8").
     ws.freeze_panes = "B2"
-
-    # Same active row/column highlight as the regular tabs (see note in the
-    # main writing loop above re: needing a manual recalc / optional macro).
-    if labels:
-        last_col_letter = ws.cell(row=1, column=len(labels)).column_letter
-        highlight_fill = PatternFill(start_color="FFD9D9", end_color="FFD9D9", fill_type="solid")
-        highlight_range = f"A1:{last_col_letter}{ws.max_row}"
-        ws.conditional_formatting.add(
-            highlight_range,
-            FormulaRule(formula=['(CELL("row")=ROW())+(CELL("col")=COLUMN())'], fill=highlight_fill)
-        )
 
     # ---- "Box display" quick-view on the Symbol column (feature request: "Add
     # Feature (box display & pop-up box both option) in Symbol column"). This uses
@@ -1573,28 +1557,13 @@ if all_candidate_files or custom_tab_files:
                             worksheet.column_dimensions[column_letter].width = min(max_length + 2, 50)
 
                         # Freeze the header row(s) AND the first column (feature request:
-                        # "freeze 1st column in all tab"). A few tabs additionally need
-                        # more rows kept visible than just the header — those are listed
-                        # in CUSTOM_FREEZE_ROWS ("Row freeze problem" fix) and take priority.
+                        # "freeze 1st column in all tab"). Freezing right after the header
+                        # row is correct for every tab, since the "⬆️ Main Tab" nav row (1)
+                        # + header row (2) precede the data on every sheet.
                         last_frozen_row = CUSTOM_FREEZE_ROWS.get(tab, header_row)
                         worksheet.freeze_panes = worksheet.cell(row=last_frozen_row + 1, column=2).coordinate
                         last_col_letter = worksheet.cell(row=header_row, column=len(df_target.columns)).column_letter
                         worksheet.auto_filter.ref = f"A{header_row}:{last_col_letter}{worksheet.max_row}"
-
-                        # Highlight the active row & column (feature request: "highlight
-                        # particular row & column cell"). This is a volatile formula-based
-                        # conditional format — Excel only recalculates CELL("row")/CELL("col")
-                        # on a worksheet recalculation (e.g. pressing F9, editing any cell,
-                        # or via a macro that forces Calculate on selection change). Pure
-                        # Python/openpyxl cannot make it live-update purely on click without
-                        # a macro, so this is the closest no-macro equivalent; see
-                        # EXCEL_MACRO_SETUP.md for the optional macro that makes it instant.
-                        highlight_fill = PatternFill(start_color="FFD9D9", end_color="FFD9D9", fill_type="solid")
-                        highlight_range = f"A{header_row}:{last_col_letter}{worksheet.max_row}"
-                        worksheet.conditional_formatting.add(
-                            highlight_range,
-                            FormulaRule(formula=['(CELL("row")=ROW())+(CELL("col")=COLUMN())'], fill=highlight_fill)
-                        )
 
                         # Default cell this tab opens/scrolls to in Excel (A1 unless overridden above).
                         view_cell = get_default_view_cell(tab)
@@ -1617,7 +1586,35 @@ if all_candidate_files or custom_tab_files:
                     writer.book, master_df, column_order=active_master_order, field_map=exec_field_map
                 )
 
+            # IMPORTANT: st.button() only reports True on the exact run it was
+            # clicked — any later rerun (e.g. from clicking one of the PDF
+            # buttons below) makes this whole "if" block skip entirely again.
+            # So the results are stashed in session_state here, and everything
+            # that follows (metrics, downloads, PDF export) is rendered from
+            # session_state OUTSIDE this button's "if", where it survives reruns.
+            st.session_state["consolidation_result"] = {
+                "output_bytes": output_stream.getvalue(),
+                "master_df": master_df,
+                "active_master_order": active_master_order,
+                "master_log": master_log,
+                "processed_dataframes": processed_dataframes,
+            }
+            # Clear any stale PDFs from a previous run so old data can't be re-downloaded.
+            st.session_state.pop("all_tabs_pdf_bytes", None)
+            st.session_state.pop("master_pdf_bytes", None)
+
+        # ---------------------------------------------------------------------------
+        # Everything below reads from session_state, not local variables, so it keeps
+        # working across reruns triggered by the PDF buttons (see note above).
+        # ---------------------------------------------------------------------------
+        result = st.session_state.get("consolidation_result")
+        if result:
             st.success("✅ Consolidation and Formatting Complete!")
+
+            master_df = result["master_df"]
+            active_master_order = result["active_master_order"]
+            master_log = result["master_log"]
+            processed_dataframes = result["processed_dataframes"]
 
             if master_log:
                 with st.expander(f"⚠️ Master_Dashboard-8: {len(master_log)} warning(s)"):
@@ -1632,12 +1629,15 @@ if all_candidate_files or custom_tab_files:
                 m4.metric("Blank Symbols", int((master_df["Symbol"].astype(str).str.strip() == "").sum()))
             st.dataframe(master_df[active_master_order].head(20), use_container_width=True)
 
+            ts = datetime.now().strftime('%Y%m%d_%H%M')
+
             st.download_button(
                 label="📥 Download Formatted Master File",
-                data=output_stream.getvalue(),
-                file_name=f"Master_Financial_Data_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                data=result["output_bytes"],
+                file_name=f"Master_Financial_Data_{ts}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary"
+                type="primary",
+                key="download_xlsx_btn",
             )
 
             st.markdown("---")
@@ -1650,32 +1650,35 @@ if all_candidate_files or custom_tab_files:
                 "list of tabs up front. For live/changeable filtering, keep using the .xlsx file "
                 "— every tab there already has a real AutoFilter enabled."
             )
-            ts = datetime.now().strftime('%Y%m%d_%H%M')
             pdf_col1, pdf_col2 = st.columns(2)
             with pdf_col1:
-                if st.button("📄 Build All-Tabs PDF"):
-                    all_tabs_pdf = build_pdf_bytes(processed_dataframes, title="Financial Data — All Tabs")
-                    st.session_state["all_tabs_pdf_bytes"] = all_tabs_pdf.getvalue()
+                if st.button("📄 Build All-Tabs PDF", key="build_all_pdf_btn"):
+                    with st.spinner("Building All-Tabs PDF…"):
+                        all_tabs_pdf = build_pdf_bytes(processed_dataframes, title="Financial Data — All Tabs")
+                        st.session_state["all_tabs_pdf_bytes"] = all_tabs_pdf.getvalue()
                 if st.session_state.get("all_tabs_pdf_bytes"):
                     st.download_button(
                         label="📥 Download All-Tabs PDF",
                         data=st.session_state["all_tabs_pdf_bytes"],
                         file_name=f"All_Tabs_{ts}.pdf",
                         mime="application/pdf",
+                        key="download_all_pdf_btn",
                     )
             with pdf_col2:
-                if st.button("📄 Build Master_Dashboard-8 PDF"):
-                    md_pdf = build_pdf_bytes(
-                        {MASTER_SHEET_NAME: master_df[active_master_order]},
-                        title="Master_Dashboard-8"
-                    )
-                    st.session_state["master_pdf_bytes"] = md_pdf.getvalue()
+                if st.button("📄 Build Master_Dashboard-8 PDF", key="build_master_pdf_btn"):
+                    with st.spinner("Building Master_Dashboard-8 PDF…"):
+                        md_pdf = build_pdf_bytes(
+                            {MASTER_SHEET_NAME: master_df[active_master_order]},
+                            title="Master_Dashboard-8"
+                        )
+                        st.session_state["master_pdf_bytes"] = md_pdf.getvalue()
                 if st.session_state.get("master_pdf_bytes"):
                     st.download_button(
                         label="📥 Download Master_Dashboard-8 PDF",
                         data=st.session_state["master_pdf_bytes"],
                         file_name=f"Master_Dashboard-8_{ts}.pdf",
                         mime="application/pdf",
+                        key="download_master_pdf_btn",
                     )
 
 # =====================================================================================
