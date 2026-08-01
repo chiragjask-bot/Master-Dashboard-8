@@ -367,6 +367,7 @@ MASTER_FIELD_MAP = [
      "aliases": ["TtlTradgVol", "TTL TRD QNTY", "TRADED QUANTITY", "NET_TRDQTY", "Traded Qty", "NET TRD QTY", "NET TRDQTY", "TTL_TRD_QNTY"], "format": "qty"},
     {"label": "No. of Trades", "sheet": "BhavCopy_NSE_CM", "aliases": ["TtlNbOfTxsExctd", "No. of Trades", "NO OF TRADES", "TRADES", "Trade", "NO_OF_TRADES"], "format": "qty"},
     {"label": "Market Lot", "sheet": "BhavCopy_NSE_CM", "aliases": ["NewBrdLotQty", "MARKET LOT", "Market Lot"], "format": "qty"},
+    {"label": "Volume (Rs)", "sheet": "BhavCopy_NSE_CM", "aliases": ["TtlTradgVol", "TtlTrfVal", "NET_TRDVAL", "NET_TRD_VAL", "NET TRD VAL", "NET_TRDVAL", "NET TRDVAL", "Turnover (Rs.)", "Turnover (Rs)", "NET TRADED VALUE", "Net Traded Value", "Traded Value"], "format": "qty"},
     {"label": "Volume (Lakhs)", "sheet": "StocksTraded", "aliases": ["Volume (Lakhs)"], "format": "lakhs"},
     {"label": "Value (Rs. Crores)", "sheet": "StocksTraded", "aliases": ["Value (Rs Crores)", "Value (\u20b9 Crores)"], "format": "crores"},
     {"label": "Mkt Cap (Rs. Crores)", "sheet": "StocksTraded", "aliases": ["Mkt Cap (Rs Crores)", "Mkt Cap (\u20b9 Crores)", "Market Cap (\u20b9 Crores)"], "format": "crores"},
