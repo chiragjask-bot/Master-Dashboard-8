@@ -101,10 +101,12 @@ DEFAULT_REMOVE_COLUMNS = {
     "Eligible_T0_Securities": [
         "Schedule of list of securities eligible for trading in T+0 Settlement Cycle across Exchanges"
     ],
+    "mcap": ["Trade Date", "Last Trade Date"],
     "pd": ["MKT", "IND_SEC", "CORP_IND"],
     "pr": ["MKT"],
     "BhavCopy_NSE_CM": ["TradDt", "BizDt", "FinInstrmTp"],
     "eq_band_changes": ["Sr. No"],
+    "Pre-Open Market": ["FFM CAP", "FFM CAP (₹ Crores)"],
 }
 
 
@@ -183,7 +185,6 @@ DEFAULT_START_CELLS = {
     "MA": "B201",
     "Eligible_T0_Securities": "B3",
     "mrg_trading": "A11",
-    "mcap": "B2",
 }
 
 
