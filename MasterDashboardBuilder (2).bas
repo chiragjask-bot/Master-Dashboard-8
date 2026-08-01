@@ -49,7 +49,6 @@ Private Function GetFieldMap() As Variant
         Array("Market Cap (Rs.)", "mcap", "Market Cap(Rs.)", "qty", False), _
         Array("Issue Size", "mcap", "Issue Size", "qty", False), _
         Array("Category", "mcap", "Category", "text", False), _
-
         Array("Date of Listing", "EQUITY_L", "DATE OF LISTING", "date", False), _
         Array("Paid Up Value", "EQUITY_L", "PAID UP VALUE", "price", False), _
         Array("Face Value", "EQUITY_L", "FACE VALUE|Face Value(Rs.)", "price", False), _
