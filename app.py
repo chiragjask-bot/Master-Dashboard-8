@@ -63,73 +63,6 @@ def jump_to(anchor_id):
     st.rerun()
 
 # =====================================================================================
-# 0b. Upload size cap (50 MB) & 24-hour session data expiry
-#
-#    Streamlit itself has no built-in "auto-delete uploaded data after N hours"
-#    feature — nothing you upload is ever written to disk by Streamlit; it only
-#    lives in server RAM for as long as the browser session/server process stays
-#    alive, and disappears the moment the tab is closed or the app restarts.
-#    So there's no persistent store to expire in the first place.
-#
-#    What Streamlit DOES offer natively:
-#    - server.maxUploadSize (a setting in .streamlit/config.toml) is a hard,
-#      framework-level cap on how large a single file_uploader upload can be.
-#      It's app-wide (applies to every uploader) and files over the limit are
-#      rejected by Streamlit itself, before this script even runs.
-#
-#    What this script adds on top, since maxUploadSize doesn't cover everything:
-#    - A per-file check after ZIP extraction, since a small ZIP can still contain
-#      an oversized member file that never went through the uploader's own check.
-#    - An explicit 24-hour session clock: if the same browser session is somehow
-#      kept open longer than SESSION_TTL_HOURS, all uploaded files, custom tabs,
-#      and custom columns are wiped from memory and the person is asked to
-#      re-upload. This is a belt-and-suspenders safety net, not a real "storage"
-#      feature, since Streamlit was never storing anything past the session anyway.
-# =====================================================================================
-MAX_UPLOAD_MB = 50
-MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
-SESSION_TTL_HOURS = 24
-
-
-def enforce_session_ttl():
-    """Clears all session data once SESSION_TTL_HOURS have passed since the
-    session began, so nothing lingers in memory indefinitely."""
-    now = datetime.now()
-    started = st.session_state.get("session_started_at")
-    if started is None:
-        st.session_state["session_started_at"] = now
-        return
-    elapsed_hours = (now - started).total_seconds() / 3600
-    if elapsed_hours >= SESSION_TTL_HOURS:
-        st.session_state.clear()
-        st.session_state["session_started_at"] = now
-        st.warning(
-            f"⏳ This session has been open for over {SESSION_TTL_HOURS} hours, so all "
-            "uploaded files and settings were cleared for data hygiene. Please re-upload."
-        )
-
-
-def enforce_file_size_limit(files):
-    """Drops any file over MAX_UPLOAD_MB with a warning, returning the rest.
-    Mainly needed for files pulled out of a ZIP — the ZIP archive itself might be
-    small enough to pass the uploader's own maxUploadSize check while still
-    containing an oversized member inside it."""
-    ok = []
-    for f in files:
-        size = len(f.getvalue())
-        if size > MAX_UPLOAD_BYTES:
-            st.warning(
-                f"⚠️ Skipped **{f.name}** — {size / (1024 * 1024):.1f} MB, over the "
-                f"{MAX_UPLOAD_MB} MB limit."
-            )
-        else:
-            ok.append(f)
-    return ok
-
-
-enforce_session_ttl()
-
-# =====================================================================================
 # 1. Master Sequence Profile Alignment Rule
 # =====================================================================================
 TAB_SEQUENCE = [
@@ -174,63 +107,6 @@ DEFAULT_REMOVE_COLUMNS = {
 }
 
 
-# 1b-2. Default column *order* per tab, matching the raw layout each source file
-#       ships with. This only sets the sequencer's starting order — the person can
-#       still drag/move columns afterward. Tabs not listed here just keep whatever
-#       order the uploaded file has.
-DEFAULT_COLUMN_ORDER = {
-    "EQUITY_L": ["SYMBOL", "ISIN NUMBER", "NAME OF COMPANY", "SERIES", "DATE OF LISTING",
-                 "MARKET LOT", "PAID UP VALUE", "FACE VALUE"],
-    "SME_EQUITY_L": ["SYMBOL", "ISIN_NUMBER", "NAME_OF_COMPANY", "SERIES", "DATE_OF_LISTING",
-                     "PAID_UP_VALUE", "FACE_VALUE"],
-    "Eligible_T0_Securities": ["Symbol", "Name Of Company", "Series", "Effective Date"],
-    "pd": ["SYMBOL", "SECURITY", "SERIES", "PREV_CL_PR", "OPEN_PRICE", "HIGH_PRICE", "LOW_PRICE",
-           "CLOSE_PRICE", "NET_TRDVAL", "NET_TRDQTY", "TRADES", "HI_52_WK", "LO_52_WK"],
-    "pr": ["SECURITY", "PREV_CL_PR", "OPEN_PRICE", "HIGH_PRICE", "LOW_PRICE", "CLOSE_PRICE",
-           "NET_TRDVAL", "NET_TRDQTY", "TRADES", "HI_52_WK", "LO_52_WK", "IND_SEC", "CORP_IND"],
-    "bc": ["SYMBOL", "SECURITY", "SERIES", "PURPOSE", "RECORD_DT", "EX_DT"],
-    "tt": ["SECURITY", "NET_TRDVAL", "NET_TRDQTY", "PREV_CL_PR", "CLOSE_PRIC"],
-    "BhavCopy_NSE_CM": ["ISIN", "TckrSymb", "FinInstrmNm", "TtlTradgVol", "TtlTrfVal",
-                        "TtlNbOfTxsExctd", "PrvsClsgPric", "ClsPric", "LastPric", "OpnPric",
-                        "HghPric", "LwPric", "SttlmPric", "NewBrdLotQty", "Sgmt", "FinInstrmId",
-                        "Src", "SctySrs", "SsnId"],
-    "sec_bhavdata_full": ["SYMBOL", "SERIES", "DELIV_QTY", "DELIV_PER", "PREV_CLOSE",
-                          "CLOSE_PRICE", "TTL_TRD_QNTY", "TURNOVER_LACS", "NO_OF_TRADES",
-                          "OPEN_PRICE", "HIGH_PRICE", "LOW_PRICE", "LAST_PRICE", "AVG_PRICE", "DATE1"],
-    "sec_list": ["Symbol", "Security Name", "Series", "Band", "Remarks"],
-    "StocksTraded": ["Symbol", "LTP", "%chng", "Mkt Cap (₹ Crores)", "Volume (Lakhs)",
-                      "Value (₹ Crores)", "Series"],
-    "bulk": ["Symbol", "Security Name", "Client Name", "Buy/Sell", "Quantity Traded",
-             "Trade Price / Wght. Avg. Price", "Date", "Remarks"],
-    "CM_52_wk_High_low": ["SYMBOL", "Adjusted_52_Week_High", "52_Week_High_Date",
-                          "Adjusted_52_Week_Low", "52_Week_Low_DT", "SERIES"],
-    "eq_band_changes": ["Symbol", "Security Name", "Series", "From", "To"],
-}
-
-
-def default_order_for(tab, cols):
-    """Reorders this tab's actual columns to match the configured default sequence,
-    tolerating case/whitespace differences between the spec and the real header text.
-    Any columns not covered by the default sequence keep their original relative
-    order and are appended at the end, so nothing is ever silently dropped."""
-    wanted = DEFAULT_COLUMN_ORDER.get(tab)
-    if not wanted:
-        return list(cols)
-    lookup = {str(c).strip().lower(): c for c in cols}
-    ordered = []
-    used = set()
-    for w in wanted:
-        key = w.strip().lower()
-        match = lookup.get(key)
-        if match is not None and match not in used:
-            ordered.append(match)
-            used.add(match)
-    for c in cols:
-        if c not in used:
-            ordered.append(c)
-    return ordered
-
-
 def default_removals_for(tab, cols):
     """Matches the configured default-removal column names against the actual
     column names on this tab, tolerating case/whitespace differences."""
@@ -239,123 +115,6 @@ def default_removals_for(tab, cols):
         return []
     normalized_wanted = {w.strip().lower() for w in wanted}
     return [c for c in cols if str(c).strip().lower() in normalized_wanted]
-
-
-# 1c. Default "start cell" for each tab — this is the single source of truth for
-#     both (a) the "Start cell for {tab}" data-crop input's default value, and
-#     (b) which cell the tab opens/scrolls to in Excel. Anything not listed here
-#     defaults to blank / "A1" ("zero zero" — the normal top-left start).
-DEFAULT_START_CELLS = {
-    "MA": "B9",
-    "Eligible_T0_Securities": "B3",
-    "mrg_trading": "A11",
-}
-
-
-def get_default_view_cell(tab):
-    return DEFAULT_START_CELLS.get(tab, "A1")
-
-
-def render_column_sequencer(state_key, current_columns, allow_delete=False, protected=None,
-                             label="Column order", default_order=None):
-    """Renders a pick + ◀ Move Left / Move Right ▶ (+ optional 🗑 Delete) control.
-    Order (and deletions) persist in st.session_state[state_key] across reruns.
-    default_order: optional starting sequence (e.g. from DEFAULT_COLUMN_ORDER) used
-    only the first time this sequencer initializes; the person can still reorder
-    freely afterward. Falls back to current_columns as-is when not provided.
-    Returns the ordered list of column names to use for output.
-    """
-    protected = protected or []
-
-    if state_key not in st.session_state:
-        st.session_state[state_key] = list(default_order) if default_order else list(current_columns)
-    order = st.session_state[state_key]
-
-    # Keep in sync with the current column set: drop stale entries, append new ones.
-    order = [c for c in order if c in current_columns]
-    for c in current_columns:
-        if c not in order:
-            order.append(c)
-    st.session_state[state_key] = order
-
-    if not order:
-        return order
-
-    st.caption(f"🔀 {label} — pick a column, then move it left/right" + (" or delete it:" if allow_delete else ":"))
-    pick_col, left_col, right_col, del_col = st.columns([3, 1, 1, 1])
-    with pick_col:
-        pick = st.selectbox(label, options=order, key=f"{state_key}_pick", label_visibility="collapsed")
-    with left_col:
-        if st.button("◀ Left", key=f"{state_key}_left"):
-            i = order.index(pick)
-            if i > 0:
-                order[i - 1], order[i] = order[i], order[i - 1]
-                st.session_state[state_key] = order
-                st.rerun()
-    with right_col:
-        if st.button("Right ▶", key=f"{state_key}_right"):
-            i = order.index(pick)
-            if i < len(order) - 1:
-                order[i + 1], order[i] = order[i], order[i + 1]
-                st.session_state[state_key] = order
-                st.rerun()
-    if allow_delete:
-        with del_col:
-            disabled = pick in protected
-            if st.button("🗑 Delete", key=f"{state_key}_del", disabled=disabled,
-                         help="This column is required and can't be deleted" if disabled else None):
-                order.remove(pick)
-                st.session_state[state_key] = order
-                st.rerun()
-
-    st.caption(" → ".join(order))
-
-    # ---- Additional sequence box: type the exact order, comma-separated ----
-    type_col, apply_col = st.columns([5, 1])
-    with type_col:
-        typed = st.text_input(
-            "Or type the exact sequence here (comma-separated column names), then Apply:",
-            key=f"{state_key}_typed",
-            placeholder=", ".join(order),
-        )
-    with apply_col:
-        st.write("")
-        apply_clicked = st.button("Apply", key=f"{state_key}_apply")
-
-    if apply_clicked:
-        typed_names = [t.strip() for t in typed.split(",") if t.strip()]
-        if not typed_names:
-            st.warning("Type at least one column name before clicking Apply.")
-        else:
-            lookup = {c.strip().lower(): c for c in order}
-            matched, unmatched = [], []
-            for name in typed_names:
-                actual = lookup.get(name.strip().lower())
-                if actual and actual not in matched:
-                    matched.append(actual)
-                elif not actual:
-                    unmatched.append(name)
-
-            if not allow_delete:
-                # Non-deletable sequencers: anything left unmentioned is appended
-                # at the end rather than dropped, so no data silently disappears.
-                for c in order:
-                    if c not in matched:
-                        matched.append(c)
-            else:
-                # Deletable sequencers: protected columns are kept even if the
-                # person forgot to type them; everything else not typed is dropped.
-                for c in protected:
-                    if c in order and c not in matched:
-                        matched.append(c)
-
-            if unmatched:
-                st.warning(f"Not found (ignored): {', '.join(unmatched)}")
-            if matched:
-                st.session_state[state_key] = matched
-                st.rerun()
-
-    return order
 
 
 # 2. Strict Custom Numeric Formatting Strings Configuration
@@ -384,41 +143,48 @@ MASTER_SYMBOL_ALIASES = ["SYMBOL", "TckrSymb", "Symb", "Symbol"]
 
 MASTER_FIELD_MAP = [
     {"label": "Symbol", "sheet": "BhavCopy_NSE_CM", "aliases": ["TckrSymb", "SYMBOL", "Symb"], "format": "text", "isKey": True},
-    {"label": "ISIN", "sheet": "BhavCopy_NSE_CM", "aliases": ["ISIN", "ISIN NUMBER"], "format": "text"},
+
     {"label": "Series", "sheet": "BhavCopy_NSE_CM", "aliases": ["SctySrs", "SERIES", "Series", "Srs"], "format": "text"},
+    {"label": "ISIN", "sheet": "BhavCopy_NSE_CM", "aliases": ["ISIN", "ISIN NUMBER"], "format": "text"},
     {"label": "Company Name (Capital)", "sheet": "BhavCopy_NSE_CM",
      "aliases": ["FinInstrmNm", "NAME OF COMPANY", "Name Of Company", "Security Name", "SECURITY", "Security",
                  "COMPANY NAME", "COMPANY'S NAME", "Company Name", "Company's Name"], "format": "text"},
-    {"label": "Company Name", "sheet": "EQUITY_L",
-     "aliases": ["NAME OF COMPANY", "Name Of Company", "Security Name", "SECURITY", "Security",
-                 "COMPANY NAME", "COMPANY'S NAME", "Company Name", "Company's Name"], "format": "text"},
-    {"label": "Date of Listing", "sheet": "EQUITY_L", "aliases": ["DATE OF LISTING"], "format": "date"},
     {"label": "Trade Date", "sheet": "BhavCopy_NSE_CM", "aliases": ["TradDt", "Trade Date"], "format": "date"},
     {"label": "Segment", "sheet": "BhavCopy_NSE_CM", "aliases": ["Src"], "format": "text"},
-    {"label": "Delivery %", "sheet": "sec_bhavdata_full",
-     "aliases": ["DELIV PER", "DELIV %", "delivery percentage", "Delivery Percentage (%)", "DELIV_PER"], "format": "percent"},
-    {"label": "% Change", "sheet": "StocksTraded", "aliases": ["%chng", "% Change"], "format": "percent"},
     {"label": "Close Price", "sheet": "BhavCopy_NSE_CM", "aliases": ["ClsPric", "CLOSE PRICE", "Close Price", "CLOSE_PRICE"], "format": "price"},
     {"label": "CMP/LTP", "sheet": "BhavCopy_NSE_CM", "aliases": ["LastPric", "LAST PRICE", "Last Price", "LTP", "LAST_PRICE"], "format": "price"},
     {"label": "Prev Close", "sheet": "BhavCopy_NSE_CM", "aliases": ["PrvsClsgPric", "PREV CLOSE", "Previous close", "PREV_CL_PR", "PREV_CLOSE"], "format": "price"},
     {"label": "Open (Rs.)", "sheet": "BhavCopy_NSE_CM", "aliases": ["OpnPric", "Open Price", "OPEN PRICE", "OPEN_PRICE"], "format": "price"},
     {"label": "High (Rs.)", "sheet": "BhavCopy_NSE_CM", "aliases": ["HghPric", "HIGH PRICE", "High Price", "HIGH_PRICE"], "format": "price"},
     {"label": "Low (Rs.)", "sheet": "BhavCopy_NSE_CM", "aliases": ["LwPric", "Low Price", "LOW PRICE", "LOW_PRICE"], "format": "price"},
-    {"label": "Turnover (Rs.)", "sheet": "BhavCopy_NSE_CM",
-     "aliases": ["TtlTrfVal", "NET_TRDVAL", "NET_TRD_VAL", "NET TRD VAL", "NET TRDVAL", "Turnover (Rs.)", "NET TRADED VALUE", "Net Traded Value", "Traded Value"], "format": "qty"},
     {"label": "Traded Qty", "sheet": "BhavCopy_NSE_CM",
      "aliases": ["TtlTradgVol", "TTL TRD QNTY", "TRADED QUANTITY", "NET_TRDQTY", "Traded Qty", "NET TRD QTY", "NET TRDQTY", "TTL_TRD_QNTY"], "format": "qty"},
+    {"label": "Turnover (Rs.)", "sheet": "BhavCopy_NSE_CM",
+     "aliases": ["TtlTrfVal", "NET_TRDVAL", "NET_TRD_VAL", "NET TRD VAL", "NET TRDVAL", "Turnover (Rs.)", "NET TRADED VALUE", "Net Traded Value", "Traded Value"], "format": "qty"},
     {"label": "No. of Trades", "sheet": "BhavCopy_NSE_CM", "aliases": ["TtlNbOfTxsExctd", "No. of Trades", "NO OF TRADES", "TRADES", "Trade", "NO_OF_TRADES"], "format": "qty"},
     {"label": "Market Lot", "sheet": "BhavCopy_NSE_CM", "aliases": ["NewBrdLotQty", "MARKET LOT", "Market Lot"], "format": "qty"},
+
+    {"label": "% Change", "sheet": "StocksTraded", "aliases": ["%chng", "% Change"], "format": "percent"},
     {"label": "Volume (Lakhs)", "sheet": "StocksTraded", "aliases": ["Volume (Lakhs)"], "format": "lakhs"},
     {"label": "Value (Rs. Crores)", "sheet": "StocksTraded", "aliases": ["Value (Rs Crores)", "Value (\u20b9 Crores)"], "format": "crores"},
     {"label": "Mkt Cap (Rs. Crores)", "sheet": "StocksTraded", "aliases": ["Mkt Cap (Rs Crores)", "Mkt Cap (\u20b9 Crores)", "Market Cap (\u20b9 Crores)"], "format": "crores"},
+
     {"label": "Market Cap (Rs.)", "sheet": "mcap", "aliases": ["Market Cap(Rs.)"], "format": "qty"},
     {"label": "Issue Size", "sheet": "mcap", "aliases": ["Issue Size"], "format": "qty"},
     {"label": "Category", "sheet": "mcap", "aliases": ["Category"], "format": "text"},
+
+    {"label": "Company Name", "sheet": "EQUITY_L",
+     "aliases": ["NAME OF COMPANY", "Name Of Company", "Security Name", "SECURITY", "Security",
+                 "COMPANY NAME", "COMPANY'S NAME", "Company Name", "Company's Name"], "format": "text"},
+    {"label": "Date of Listing", "sheet": "EQUITY_L", "aliases": ["DATE OF LISTING"], "format": "date"},
+    {"label": "Paid Up Value", "sheet": "EQUITY_L", "aliases": ["PAID UP VALUE"], "format": "price"},
     {"label": "Face Value", "sheet": "EQUITY_L", "aliases": ["FACE VALUE", "Face Value(Rs.)"], "format": "price"},
+
     {"label": "Delivery Qty", "sheet": "sec_bhavdata_full",
      "aliases": ["DELIV QTY", "DELIV QUANTITY", "Delivery quantity", "DELIVERY QNTY", "DELIV_QNTY", "DELIV QNTY", "DELIV_QTY"], "format": "qty"},
+    {"label": "Delivery %", "sheet": "sec_bhavdata_full",
+     "aliases": ["DELIV PER", "DELIV %", "delivery percentage", "Delivery Percentage (%)", "DELIV_PER"], "format": "percent"},
+
     {"label": "52W High", "sheet": "CM_52_wk_High_low",
      "aliases": ["Adjusted_52_Week_High", "52_Week_High", "52W_High", "52 Week High", "52W High", "HI_52_WK"], "format": "price"},
     {"label": "52W High Date", "sheet": "CM_52_wk_High_low",
@@ -427,13 +193,15 @@ MASTER_FIELD_MAP = [
      "aliases": ["Adjusted_52_Week_Low", "52 Week Low", "52_Week_Low", "52W_Low", "52W Low", "LO_52_WK"], "format": "price"},
     {"label": "52W Low Date", "sheet": "CM_52_wk_High_low",
      "aliases": ["52_Week_Low_DT", "52 Week Low Date", "52 W Low Date", "52 W Low Dt.", "52W Low Dt."], "format": "date"},
-    {"label": "Symbol P/E", "sheet": "PE", "aliases": ["SYMBOL P/E", "Symbol P/E"], "format": "ratio"},
-    {"label": "Adjusted P/E", "sheet": "PE", "aliases": ["ADJUSTED P/E", "Adjusted P/E"], "format": "ratio"},
+
     {"label": "T0 Tag", "sheet": "Eligible_T0_Securities", "aliases": ["SERIES", "SctySrs", "Srs", "Series"], "format": "text"},
     {"label": "T0 Effective Date", "sheet": "Eligible_T0_Securities", "aliases": ["Effective Date"], "format": "text"},
+
     {"label": "Band", "sheet": "sec_list", "aliases": ["Band"], "format": "number"},
     {"label": "Remarks", "sheet": "sec_list", "aliases": ["Remarks"], "format": "text"},
-    {"label": "Paid Up Value", "sheet": "EQUITY_L", "aliases": ["PAID UP VALUE"], "format": "price"},
+
+    {"label": "Symbol P/E", "sheet": "PE", "aliases": ["SYMBOL P/E", "Symbol P/E"], "format": "ratio"},
+    {"label": "Adjusted P/E", "sheet": "PE", "aliases": ["ADJUSTED P/E", "Adjusted P/E"], "format": "ratio"},
 ]
 
 MASTER_NUMBER_FORMATS = {
@@ -447,13 +215,6 @@ MASTER_NUMBER_FORMATS = {
     "number": "0",
     "text": "@",
 }
-
-
-def get_active_master_field_map():
-    """MASTER_FIELD_MAP plus any custom columns the person has added via the
-    'Add a column from any tab' box in the UI. Custom columns live only in
-    st.session_state for this session — nothing is written back to this file."""
-    return MASTER_FIELD_MAP + st.session_state.get("custom_master_fields", [])
 
 
 def md_normalize_header(text) -> str:
@@ -496,19 +257,16 @@ def md_match_column(header_index: dict, aliases: list) -> int:
     return -1
 
 
-def md_build_master_dashboard(wb, field_map=None):
+def md_build_master_dashboard(wb):
     """wb is an openpyxl Workbook already holding the freshly consolidated tabs
-    (values, not formulas — safe to read cell.value directly, no data_only reload needed).
-    field_map: optional field list to use instead of the base MASTER_FIELD_MAP — pass
-    get_active_master_field_map() to include any custom columns the user has added."""
-    field_map = field_map if field_map is not None else MASTER_FIELD_MAP
+    (values, not formulas — safe to read cell.value directly, no data_only reload needed)."""
     all_aliases = list(MASTER_SYMBOL_ALIASES)
-    for f in field_map:
+    for f in MASTER_FIELD_MAP:
         all_aliases += f["aliases"]
     all_aliases_norm = {md_normalize_header(a) for a in all_aliases}
 
     fields_by_sheet = {}
-    for f in field_map:
+    for f in MASTER_FIELD_MAP:
         fields_by_sheet.setdefault(f["sheet"], []).append(f)
 
     master_data = {}
@@ -553,29 +311,20 @@ def md_build_master_dashboard(wb, field_map=None):
                     master_data[symbol][label] = val
 
     symbol_order = sorted(symbol_order)
-    labels = [f["label"] for f in field_map]
+    labels = [f["label"] for f in MASTER_FIELD_MAP]
     rows = [[master_data[s].get(l, "") for l in labels] for s in symbol_order]
     df = pd.DataFrame(rows, columns=labels)
     return df, log
 
 
-def md_write_master_sheet(wb, df, column_order=None, field_map=None):
-    """Adds/overwrites Master_Dashboard-8 directly on the same workbook object.
-    column_order: optional list of field labels (subset/reordered) controlling
-    which columns appear and in what order. Defaults to the full field_map.
-    field_map: optional field list to use instead of the base MASTER_FIELD_MAP — pass
-    get_active_master_field_map() to include any custom columns the user has added."""
-    field_map = field_map if field_map is not None else MASTER_FIELD_MAP
+def md_write_master_sheet(wb, df):
+    """Adds/overwrites Master_Dashboard-8 directly on the same workbook object."""
     if MASTER_SHEET_NAME in wb.sheetnames:
         del wb[MASTER_SHEET_NAME]
     ws = wb.create_sheet(MASTER_SHEET_NAME)
 
-    field_lookup = {f["label"]: f for f in field_map}
-    labels = [l for l in (column_order or list(df.columns)) if l in field_lookup]
-    if not labels:
-        labels = list(df.columns)
-    df = df[labels]
-    formats = [MASTER_NUMBER_FORMATS.get(field_lookup[l]["format"], "@") for l in labels]
+    labels = list(df.columns)
+    formats = [MASTER_NUMBER_FORMATS.get(f["format"], "@") for f in MASTER_FIELD_MAP]
 
     header_fill = PatternFill(start_color=MASTER_HIGHLIGHT_COLOR, end_color=MASTER_HIGHLIGHT_COLOR, fill_type="solid")
     bold_font = Font(name="Arial", bold=True)
@@ -857,117 +606,27 @@ def extract_all_files(zip_bytes, _depth=0, _max_depth=3):
 col_up1, col_up2 = st.columns(2)
 with col_up1:
     uploaded_files = st.file_uploader(
-        f"Upload Source CSV or Excel Files (max {MAX_UPLOAD_MB} MB each)",
+        "Upload Source CSV or Excel Files",
         accept_multiple_files=True,
         type=['csv', 'xlsx', 'xls']
     )
 with col_up2:
     uploaded_zips = st.file_uploader(
-        f"…or upload a ZIP / folder-export containing the source files (max {MAX_UPLOAD_MB} MB each)",
+        "…or upload a ZIP / folder-export containing the source files",
         accept_multiple_files=True,
         type=['zip']
     )
 
-all_candidate_files = enforce_file_size_limit(list(uploaded_files) if uploaded_files else [])
+all_candidate_files = list(uploaded_files) if uploaded_files else []
 
 if uploaded_zips:
-    uploaded_zips = enforce_file_size_limit(list(uploaded_zips))
     for z in uploaded_zips:
-        extracted = enforce_file_size_limit(extract_all_files(z.getvalue()))
+        extracted = extract_all_files(z.getvalue())
         all_candidate_files.extend(extracted)
     st.caption(
         f"📦 Extracted {sum(len(extract_all_files(z.getvalue())) for z in uploaded_zips)} "
         f"file(s) from {len(uploaded_zips)} zip archive(s), including nested zip/gz files."
     )
-
-st.markdown("---")
-st.subheader("📎 Add a custom tab from any Excel/CSV file")
-st.caption(
-    "Upload any file that doesn't match one of the fixed tab names above and give it "
-    "its own tab name. You can add as many of these as you like, rename any of them "
-    "at any time, and their columns can be pulled into Master_Dashboard-8 the same "
-    f"way as the built-in tabs. Max {MAX_UPLOAD_MB} MB per file."
-)
-st.session_state.setdefault("custom_tabs", [])  # list of {"name","filename","bytes"}
-st.session_state.setdefault("custom_tab_uploader_key", 0)
-
-new_tab_file = st.file_uploader(
-    f"File for the new tab (max {MAX_UPLOAD_MB} MB)",
-    type=['csv', 'xlsx', 'xls'],
-    key=f"custom_tab_uploader_{st.session_state['custom_tab_uploader_key']}",
-)
-if new_tab_file is not None and len(new_tab_file.getvalue()) > MAX_UPLOAD_BYTES:
-    size_mb = len(new_tab_file.getvalue()) / (1024 * 1024)
-    st.warning(f"⚠️ **{new_tab_file.name}** is {size_mb:.1f} MB — over the {MAX_UPLOAD_MB} MB limit. Not added.")
-    new_tab_file = None
-default_new_name = ""
-if new_tab_file is not None:
-    default_new_name = re.sub(r'\.(csv|xlsx|xls)$', '', new_tab_file.name, flags=re.IGNORECASE)
-new_tab_name_col, new_tab_btn_col = st.columns([3, 1])
-with new_tab_name_col:
-    new_tab_name = st.text_input(
-        "Tab name for this file", value=default_new_name, key="new_custom_tab_name"
-    )
-with new_tab_btn_col:
-    st.write("")
-    add_tab_clicked = st.button("➕ Add as new tab", key="add_custom_tab_btn")
-
-if add_tab_clicked:
-    name_clean = new_tab_name.strip()
-    existing_names = {t.lower() for t in TAB_SEQUENCE} | {
-        t["name"].strip().lower() for t in st.session_state["custom_tabs"]
-    }
-    if new_tab_file is None:
-        st.warning("Upload a file before adding it as a tab.")
-    elif not name_clean:
-        st.warning("Type a tab name before adding.")
-    elif name_clean.lower() in existing_names:
-        st.warning(f'"{name_clean}" is already a tab name — pick a different one.')
-    else:
-        st.session_state["custom_tabs"].append({
-            "name": name_clean,
-            "filename": new_tab_file.name,
-            "bytes": new_tab_file.getvalue(),
-        })
-        # Bump the uploader's key so the widget resets empty, ready for the next file.
-        st.session_state["custom_tab_uploader_key"] += 1
-        st.success(f'Added tab "{name_clean}" ({new_tab_file.name}).')
-        st.rerun()
-
-if st.session_state["custom_tabs"]:
-    st.caption("Custom tabs added so far — rename or remove any of them:")
-    for i, ct in enumerate(st.session_state["custom_tabs"]):
-        rc1, rc2 = st.columns([4, 1])
-        with rc1:
-            renamed = st.text_input(
-                f"Tab name (from {ct['filename']})",
-                value=ct["name"],
-                key=f"custom_tab_rename_{i}",
-            )
-            renamed_clean = renamed.strip()
-            if renamed_clean and renamed_clean != ct["name"]:
-                others = {t.lower() for t in TAB_SEQUENCE} | {
-                    t["name"].strip().lower()
-                    for j, t in enumerate(st.session_state["custom_tabs"]) if j != i
-                }
-                if renamed_clean.lower() in others:
-                    st.warning(f'"{renamed_clean}" is already used by another tab — not renamed.')
-                else:
-                    st.session_state["custom_tabs"][i]["name"] = renamed_clean
-        with rc2:
-            st.write("")
-            if st.button("🗑 Remove tab", key=f"custom_tab_remove_{i}"):
-                st.session_state["custom_tabs"].pop(i)
-                st.rerun()
-
-# Ready-to-use custom tab file map, keyed by (possibly renamed) tab name.
-custom_tab_files = {
-    ct["name"]: InMemoryFile(ct["filename"], ct["bytes"]) for ct in st.session_state["custom_tabs"]
-}
-CUSTOM_TAB_NAMES = list(custom_tab_files.keys())
-ALL_TABS = TAB_SEQUENCE + CUSTOM_TAB_NAMES
-
-st.markdown("---")
 
 # Active File Verification Status Dashboard
 st.subheader("📋 Sequence Checklist & Missing Files Audit")
@@ -995,8 +654,6 @@ for files in tab_candidates.values():
     files.sort(key=_candidate_sort_key)
 
 valid_files_map = {}
-# Custom tabs are unambiguous (one file, deliberately added) — register them directly.
-valid_files_map.update(custom_tab_files)
 
 for idx, tab in enumerate(TAB_SEQUENCE):
     col_to_use = status_cols[idx % 3]
@@ -1022,13 +679,6 @@ for idx, tab in enumerate(TAB_SEQUENCE):
     else:
         col_to_use.markdown(f"**❌ {tab}** — <span style='color:#d9534f; font-weight:bold;'>Missing</span>", unsafe_allow_html=True)
 
-for idx, tab in enumerate(CUSTOM_TAB_NAMES):
-    col_to_use = status_cols[(len(TAB_SEQUENCE) + idx) % 3]
-    col_to_use.markdown(
-        f"**✅ {tab}** <small style='color:green;'>({custom_tab_files[tab].name} — custom tab)</small>",
-        unsafe_allow_html=True,
-    )
-
 st.markdown("---")
 
 # =====================================================================================
@@ -1041,7 +691,7 @@ st.caption(
 )
 
 nav_cols = st.columns(3)
-for idx, tab in enumerate(ALL_TABS):
+for idx, tab in enumerate(TAB_SEQUENCE):
     nav_col = nav_cols[idx % 3]
     with nav_col:
         if tab in valid_files_map:
@@ -1099,7 +749,7 @@ for i, url in enumerate(st.session_state["custom_urls"]):
 
 st.markdown("---")
 
-if all_candidate_files or custom_tab_files:
+if all_candidate_files:
     if not valid_files_map:
         st.warning("⚠️ Bypassed all uploaded files. None of the file names match the required target criteria.")
     else:
@@ -1109,14 +759,13 @@ if all_candidate_files or custom_tab_files:
 
         st.subheader("🛠️ Component Tuning & Data Previews")
 
-        for tab in ALL_TABS:
+        for tab in TAB_SEQUENCE:
             if tab in valid_files_map:
                 f = valid_files_map[tab]
 
-                # "Zero Zero" start-cell override — some tabs default to a specific
-                # start cell as a special case; every other tab defaults to blank
-                # (normal A1 / "zero zero" start) unless the person sets one.
-                st.session_state.setdefault(f"start_cell_{tab}", DEFAULT_START_CELLS.get(tab, ""))
+                # "Zero Zero" start-cell override — MA defaults to B9 as a special case;
+                # every other tab defaults to blank (normal A1 start) unless the person sets one.
+                st.session_state.setdefault(f"start_cell_{tab}", "B9" if tab == "MA" else "")
                 start_cell_value = st.session_state.get(f"start_cell_{tab}", "")
                 start_row_number, start_col_index = parse_start_cell(start_cell_value)
 
@@ -1204,15 +853,6 @@ if all_candidate_files or custom_tab_files:
                     if rows_to_drop:
                         df_cleaned = df_cleaned.drop(index=sorted(rows_to_drop)).reset_index(drop=True)
 
-                    seq_order = render_column_sequencer(
-                        f"colorder_{tab}",
-                        df_cleaned.columns.tolist(),
-                        allow_delete=False,
-                        label=f"Column order for {tab}",
-                        default_order=default_order_for(tab, df_cleaned.columns.tolist()),
-                    )
-                    df_cleaned = df_cleaned[seq_order]
-
                     processed_dataframes[tab] = df_cleaned
                     st.caption(f"Rows: {len(df)} original → {len(df_cleaned)} after cleanup")
                     st.dataframe(df_cleaned.head(10), use_container_width=True)
@@ -1271,82 +911,6 @@ if all_candidate_files or custom_tab_files:
                                 st.error(f"AI analysis failed for {tab}: {e}")
 
         st.markdown("---")
-        st.subheader("➕ Add a column from any tab to Master_Dashboard-8")
-        st.caption(
-            "Master_Dashboard-8's default fields are the list below, but you can also pull "
-            "in any extra column from any tab. Pick the tab it lives on, type the exact "
-            "column name as it appears in that tab's file, optionally give it a shorter "
-            "label for Master_Dashboard-8, then Add. It's session-only — nothing is saved "
-            "back to this script."
-        )
-        add_tab_col, add_name_col, add_label_col = st.columns([2, 2, 2])
-        with add_tab_col:
-            master_col_tab = st.selectbox("Tab name", options=ALL_TABS, key="custom_field_tab")
-        with add_name_col:
-            custom_col_name = st.text_input(
-                "Column name (exact, from that tab)", key="custom_field_colname"
-            )
-        with add_label_col:
-            custom_label = st.text_input(
-                "Label in Master_Dashboard-8 (optional)", key="custom_field_label"
-            )
-        add_clicked = st.button("Add column", key="custom_field_add")
-
-        if add_clicked:
-            col_name_clean = custom_col_name.strip()
-            if not col_name_clean:
-                st.warning("Type the column name before clicking Add.")
-            else:
-                label_clean = custom_label.strip() or col_name_clean
-                existing_labels = {f["label"] for f in get_active_master_field_map()}
-                if label_clean in existing_labels:
-                    st.warning(
-                        f'"{label_clean}" is already a Master_Dashboard-8 column — '
-                        "pick a different label."
-                    )
-                else:
-                    st.session_state.setdefault("custom_master_fields", [])
-                    st.session_state["custom_master_fields"].append({
-                        "label": label_clean,
-                        "sheet": master_col_tab,
-                        "aliases": [col_name_clean],
-                        "format": "text",
-                    })
-                    # Stale sequencer order would otherwise hide the new column until
-                    # it's dropped and re-synced, so clear it and let it re-append.
-                    st.session_state.pop("master_col_order", None)
-                    st.success(f'Added "{label_clean}" (from {master_col_tab} → {col_name_clean}).')
-                    st.rerun()
-
-        custom_fields = st.session_state.get("custom_master_fields", [])
-        if custom_fields:
-            st.caption("Custom columns added so far:")
-            for i, f in enumerate(custom_fields):
-                c1, c2 = st.columns([5, 1])
-                c1.write(f'• **{f["label"]}** ← {f["sheet"]} → {f["aliases"][0]}')
-                if c2.button("🗑 Remove", key=f"custom_field_remove_{i}"):
-                    st.session_state["custom_master_fields"].pop(i)
-                    st.session_state.pop("master_col_order", None)
-                    st.rerun()
-
-        st.markdown("---")
-        st.subheader("🔀 Master_Dashboard-8 — column order & inclusion")
-        st.caption(
-            "Master_Dashboard-8's columns come from a fixed field list (plus any custom "
-            "columns you added above), not from your uploads, so you can sequence them "
-            "any time. Move columns left/right to change their order in the final sheet, "
-            "or delete ones you don't want. 'Symbol' is the join key and can't be deleted."
-        )
-        active_field_map = get_active_master_field_map()
-        master_col_order = render_column_sequencer(
-            "master_col_order",
-            [f["label"] for f in active_field_map],
-            allow_delete=True,
-            protected=["Symbol"],
-            label="Master_Dashboard-8 columns",
-        )
-
-        st.markdown("---")
 
         if st.button("🚀 Execute Structural Consolidation", type="primary"):
             output_stream = io.BytesIO()
@@ -1355,7 +919,7 @@ if all_candidate_files or custom_tab_files:
             LINK_FONT = Font(color="0563C1", underline="single", bold=True)
 
             with pd.ExcelWriter(output_stream, engine='openpyxl') as writer:
-                exportable_tabs = [t for t in ALL_TABS if t in processed_dataframes]
+                exportable_tabs = [t for t in TAB_SEQUENCE if t in processed_dataframes]
 
                 # --- Build the "Main Tab" hub sheet first, so it opens as sheet #1 ---
                 main_ws = writer.book.create_sheet(title="Main Tab")
@@ -1394,7 +958,7 @@ if all_candidate_files or custom_tab_files:
                 for c_idx in range(4, 4 + max_col_count):
                     main_ws.column_dimensions[main_ws.cell(row=header_row_num, column=c_idx).column_letter].width = 22
 
-                for tab in ALL_TABS:
+                for tab in TAB_SEQUENCE:
                     if tab in processed_dataframes:
                         df_target = processed_dataframes[tab]
 
@@ -1496,26 +1060,13 @@ if all_candidate_files or custom_tab_files:
                         last_col_letter = worksheet.cell(row=header_row, column=len(df_target.columns)).column_letter
                         worksheet.auto_filter.ref = f"A{header_row}:{last_col_letter}{worksheet.max_row}"
 
-                        # Default cell this tab opens/scrolls to in Excel (A1 unless overridden above).
-                        view_cell = get_default_view_cell(tab)
-                        worksheet.sheet_view.topLeftCell = view_cell
-                        if worksheet.sheet_view.selection:
-                            worksheet.sheet_view.selection[0].activeCell = view_cell
-                            worksheet.sheet_view.selection[0].sqref = view_cell
-
                 # -----------------------------------------------------------------
                 # Auto-build Master_Dashboard-8 by default — no extra click needed.
                 # Reads straight off writer.book, which already holds every tab
                 # just written above, and appends the joined sheet to it.
                 # -----------------------------------------------------------------
-                exec_field_map = get_active_master_field_map()
-                master_df, master_log = md_build_master_dashboard(writer.book, field_map=exec_field_map)
-                active_master_order = st.session_state.get(
-                    "master_col_order", [f["label"] for f in exec_field_map]
-                )
-                md_write_master_sheet(
-                    writer.book, master_df, column_order=active_master_order, field_map=exec_field_map
-                )
+                master_df, master_log = md_build_master_dashboard(writer.book)
+                md_write_master_sheet(writer.book, master_df)
 
             st.success("✅ Consolidation and Formatting Complete!")
 
@@ -1526,11 +1077,11 @@ if all_candidate_files or custom_tab_files:
 
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Master_Dashboard-8 Symbols", len(master_df))
-            m2.metric("Columns", len(active_master_order))
+            m2.metric("Columns", len(master_df.columns))
             if "Symbol" in master_df.columns:
                 m3.metric("Duplicate Symbols", int(master_df["Symbol"].duplicated().sum()))
                 m4.metric("Blank Symbols", int((master_df["Symbol"].astype(str).str.strip() == "").sum()))
-            st.dataframe(master_df[active_master_order].head(20), use_container_width=True)
+            st.dataframe(master_df.head(20), use_container_width=True)
 
             st.download_button(
                 label="📥 Download Formatted Master File",
