@@ -180,9 +180,10 @@ def default_removals_for(tab, cols):
 #     (b) which cell the tab opens/scrolls to in Excel. Anything not listed here
 #     defaults to blank / "A1" ("zero zero" — the normal top-left start).
 DEFAULT_START_CELLS = {
-    "MA": "B9",
+    "MA": "B201",
     "Eligible_T0_Securities": "B3",
     "mrg_trading": "A11",
+    "mcap": "B2",
 }
 
 
@@ -358,9 +359,9 @@ MASTER_FIELD_MAP = [
     {"label": "Close Price", "sheet": "BhavCopy_NSE_CM", "aliases": ["ClsPric", "CLOSE PRICE", "Close Price", "CLOSE_PRICE"], "format": "price"},
     {"label": "CMP/LTP", "sheet": "BhavCopy_NSE_CM", "aliases": ["LastPric", "LAST PRICE", "Last Price", "LTP", "LAST_PRICE"], "format": "price"},
     {"label": "Prev Close", "sheet": "BhavCopy_NSE_CM", "aliases": ["PrvsClsgPric", "PREV CLOSE", "Previous close", "PREV_CL_PR", "PREV_CLOSE"], "format": "price"},
-    {"label": "Open (Rs.)", "sheet": "BhavCopy_NSE_CM", "aliases": ["OpnPric", "Open Price", "OPEN PRICE", "OPEN_PRICE"], "format": "price"},
-    {"label": "High (Rs.)", "sheet": "BhavCopy_NSE_CM", "aliases": ["HghPric", "HIGH PRICE", "High Price", "HIGH_PRICE"], "format": "price"},
-    {"label": "Low (Rs.)", "sheet": "BhavCopy_NSE_CM", "aliases": ["LwPric", "Low Price", "LOW PRICE", "LOW_PRICE"], "format": "price"},
+    {"label": "Open", "sheet": "BhavCopy_NSE_CM", "aliases": ["OpnPric", "Open Price", "OPEN PRICE", "OPEN_PRICE"], "format": "price"},
+    {"label": "High", "sheet": "BhavCopy_NSE_CM", "aliases": ["HghPric", "HIGH PRICE", "High Price", "HIGH_PRICE"], "format": "price"},
+    {"label": "Low", "sheet": "BhavCopy_NSE_CM", "aliases": ["LwPric", "Low Price", "LOW PRICE", "LOW_PRICE"], "format": "price"},
     {"label": "Turnover (Rs.)", "sheet": "BhavCopy_NSE_CM",
      "aliases": ["TtlTrfVal", "NET_TRDVAL", "NET_TRD_VAL", "NET TRD VAL", "NET TRDVAL", "Turnover (Rs.)", "NET TRADED VALUE", "Net Traded Value", "Traded Value"], "format": "qty"},
     {"label": "Traded Qty", "sheet": "BhavCopy_NSE_CM",
@@ -368,11 +369,11 @@ MASTER_FIELD_MAP = [
     {"label": "No. of Trades", "sheet": "BhavCopy_NSE_CM", "aliases": ["TtlNbOfTxsExctd", "No. of Trades", "NO OF TRADES", "TRADES", "Trade", "NO_OF_TRADES"], "format": "qty"},
     {"label": "Market Lot", "sheet": "BhavCopy_NSE_CM", "aliases": ["NewBrdLotQty", "MARKET LOT", "Market Lot"], "format": "qty"},
     {"label": "Volume (Lakhs)", "sheet": "StocksTraded", "aliases": ["Volume (Lakhs)"], "format": "lakhs"},
-    {"label": "Volume (Rs.)", "sheet": "BhavCopy_NSE_CM", "aliases": ["TtlTradgVol", "NET_TRDQTY"], "format": "qty"},
+    {"label": "Volume", "sheet": "BhavCopy_NSE_CM", "aliases": ["TtlTradgVol", "NET_TRDQTY"], "format": "qty"},
     {"label": "Value (Crores)", "sheet": "StocksTraded", "aliases": ["Value (Rs Crores)", "Value (\u20b9 Crores)"], "format": "crores"},
-    {"label": "Value (Rs.)", "sheet": "BhavCopy_NSE_CM", "aliases": ["TtlTrfVal", "NET_TRDVAL"], "format": "qty"},
+    {"label": "Value (Rs)", "sheet": "BhavCopy_NSE_CM", "aliases": ["TtlTrfVal", "NET_TRDVAL"], "format": "qty"},
     {"label": "Mkt Cap (Crores)", "sheet": "StocksTraded", "aliases": ["Mkt Cap (Rs Crores)", "Mkt Cap (\u20b9 Crores)", "Market Cap (\u20b9 Crores)"], "format": "crores"},
-    {"label": "Market Cap (Rs.)", "sheet": "mcap", "aliases": ["Market Cap(Rs.)"], "format": "qty"},
+    {"label": "Market Cap (Rs)", "sheet": "mcap", "aliases": ["Market Cap(Rs.)"], "format": "qty"},
     {"label": "Share Qty /Issue Size", "sheet": "mcap", "aliases": ["Issue Size"], "format": "qty"},
     {"label": "Category", "sheet": "mcap", "aliases": ["Category"], "format": "text"},
     {"label": "Face Value", "sheet": "EQUITY_L", "aliases": ["FACE VALUE", "Face Value(Rs.)"], "format": "price"},
