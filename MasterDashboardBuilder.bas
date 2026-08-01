@@ -26,9 +26,10 @@ Private Const HEADER_FILL_RGB As Long = 15121130   ' RGB(234,209,220) = EAD1DC
 Private Function GetFieldMap() As Variant
     GetFieldMap = Array( _
         Array("Symbol", "BhavCopy_NSE_CM", "TckrSymb|SYMBOL|Symb", "text", True), _
-        Array("Series", "BhavCopy_NSE_CM", "SctySrs|SERIES|Series|Srs", "text", False), _
         Array("ISIN", "BhavCopy_NSE_CM", "ISIN|ISIN NUMBER", "text", False), _
+        Array("Series", "BhavCopy_NSE_CM", "SctySrs|SERIES|Series|Srs", "text", False), _
         Array("Company Name (Capital)", "BhavCopy_NSE_CM", "FinInstrmNm|NAME OF COMPANY|Name Of Company|Security Name|SECURITY|Security|COMPANY NAME|COMPANY'S NAME|Company Name|Company's Name", "text", False), _
+        Array("Company Name", "EQUITY_L", "NAME OF COMPANY|Name Of Company|Security Name|SECURITY|Security|COMPANY NAME|COMPANY'S NAME|Company Name|Company's Name", "text", False), _
         Array("Trade Date", "BhavCopy_NSE_CM", "TradDt|Trade Date", "date", False), _
         Array("Segment", "BhavCopy_NSE_CM", "Src", "text", False), _
         Array("Close Price", "BhavCopy_NSE_CM", "ClsPric|CLOSE PRICE|Close Price|CLOSE_PRICE", "price", False), _
@@ -48,7 +49,7 @@ Private Function GetFieldMap() As Variant
         Array("Market Cap (Rs.)", "mcap", "Market Cap(Rs.)", "qty", False), _
         Array("Issue Size", "mcap", "Issue Size", "qty", False), _
         Array("Category", "mcap", "Category", "text", False), _
-        Array("Company Name", "EQUITY_L", "NAME OF COMPANY|Name Of Company|Security Name|SECURITY|Security|COMPANY NAME|COMPANY'S NAME|Company Name|Company's Name", "text", False), _
+
         Array("Date of Listing", "EQUITY_L", "DATE OF LISTING", "date", False), _
         Array("Paid Up Value", "EQUITY_L", "PAID UP VALUE", "price", False), _
         Array("Face Value", "EQUITY_L", "FACE VALUE|Face Value(Rs.)", "price", False), _
