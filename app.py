@@ -4,6 +4,7 @@ import pandas as pd
 import re
 import io
 import os
+import random
 import zipfile
 import gzip
 from datetime import datetime
@@ -12,44 +13,119 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.worksheet.datavalidation import DataValidation
 
 # =====================================================================================
-# 0. OPTIONAL LOGIN GATE  (keeps the app private without ever putting a password on GitHub)
+# 0. LOGIN GATE  (keeps the app private without ever putting a password on GitHub)
 # =====================================================================================
-# How this works:
-#   - Credentials live ONLY in Streamlit secrets (a file called .streamlit/secrets.toml)
-#   - That file is added to .gitignore, so it is never pushed to GitHub.
-#   - On Streamlit Community Cloud, you paste the same values into
-#     "App settings -> Secrets" in the web UI instead of a file.
-#
-# .streamlit/secrets.toml should look like:
+# Two modes, tried in this order every time the app loads:
+#   1) Streamlit secrets [auth] username/password (original method — more secure,
+#      since the real credentials never touch this .py file). Used automatically
+#      whenever a .streamlit/secrets.toml (or Streamlit Cloud "Secrets") [auth]
+#      section is configured.
+#   2) A single hardcoded ADMIN_PASSWORD gate (added per request). Used
+#      automatically whenever [auth] secrets are NOT configured — e.g. for quick
+#      local/admin use without setting up secrets at all.
+# .streamlit/secrets.toml, if used, should look like:
 #   [auth]
 #   username = "your_username"
 #   password = "your_password"
-#
-# If no [auth] secrets are configured, the login gate is skipped automatically
-# (useful for local testing) so the app still runs.
-def check_login():
-    auth_cfg = st.secrets.get("auth", None)
-    if not auth_cfg:
-        return True  # no credentials configured -> don't block access
+ADMIN_PASSWORD = "kano"
 
+# Playful Hinglish error messages for the hardcoded ADMIN_PASSWORD path, one is
+# picked at random on every wrong attempt.
+ADMIN_PASSWORD_ERROR_MESSAGES = [
+    "Password इल्ले! 😅 इल्ले!, खम्मा घणी भाईसा, सॉरी। तुमसे सब कुछ हो पाएगा! यहां बहुत 🤪 दिमाग मत लगाओ, इस वेबसाइट को नहीं, 😂 इस गलत पासवर्ड को छोड़ दो!",
+    "❌ Password इल्ले भाईसा! 😅 इल्ले! खम्मा घणी, सॉरी। तुम बाहुबली हो, तुमसे सब कुछ हो पाएगा! पर यहाँ फालतू 🤪 दिमाग मत लगाओ। अपनी सुंदर वेबसाइट को नहीं, 😂 इस सड़े हुए गलत पासवर्ड को छोड़ दो!",
+    "❌ खम्मा घणी भाईसा, Password इल्ले! 😅 sorry! तुम तो मंगल ग्रह पर पानी खोज सकते हो, तुमसे सब कुछ हो पाएगा! पर यहाँ ज़्यादा 🤪 दिमाग मत लगाओ। इस सीधे-सादे वेबसाइट को नहीं, 😂 इस जाली पासवर्ड को छोड़ दो!",
+    "❌ Password इल्ले! 😅 इल्ले! खम्मा घणी भाईसा, सॉरी। लोड मत लो, तुमसे सब कुछ हो पाएगा! पर यहाँ फालतू 🤪 दिमाग मत लगाओ। दुनिया छोड़ दो, मोक्ष पकड़ लो, पर पहले 😂 इस गलत पासवर्ड को छोड़ दो!",
+    "❌ अरे भाईसा! Password इल्ले! 😅 खम्मा घणी, सॉरी। तुम चाहो तो सिस्टम हिला सकते हो, तुमसे सब कुछ हो पाएगा! पर यहाँ ज़्यादा 🤪 दिमाग मत लगाओ। इस निर्दोष वेबसाइट को नहीं, 😂 इस भूतिया गलत पासवर्ड को छोड़ दो!",
+]
+
+
+def check_login():
     if st.session_state.get("authenticated", False):
         return True
 
-    st.title("🔒 Financial File Merger & Formatter — Login")
-    with st.form("login_form"):
-        user = st.text_input("Username")
-        pwd = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Log in")
-    if submitted:
-        if user == auth_cfg.get("username") and pwd == auth_cfg.get("password"):
-            st.session_state["authenticated"] = True
-            st.rerun()
-        else:
-            st.error("Invalid username or password.")
+    auth_cfg = st.secrets.get("auth", None)
+
+    # ---- Mode 1: secrets-based username/password (unchanged from before) ----
+    if auth_cfg:
+        st.title("🔒 Financial File Merger & Formatter — Login")
+        with st.form("login_form"):
+            user = st.text_input("Username")
+            pwd = st.text_input("Password", type="password")
+            submitted = st.form_submit_button("Log in")
+        if submitted:
+            if user == auth_cfg.get("username") and pwd == auth_cfg.get("password"):
+                st.session_state["authenticated"] = True
+                st.rerun()
+            else:
+                st.error("Invalid username or password.")
+        return False
+
+    # ---- Mode 2: hardcoded ADMIN_PASSWORD gate ----
+    st.markdown(
+        "<p style='text-align: center; margin-top: 100px; color: Green; font-size: 18px;'>"
+        "📊 Financial Data File Merger & Formatter</p>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<h1 style='text-align: center; margin-top: 0px; font-size: 20px;'>🔐 Admin Login</h1>",
+        unsafe_allow_html=True,
+    )
+
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        with st.form("admin_login_form"):
+            pwd = st.text_input("Enter Password", type="password")
+            submit = st.form_submit_button("Login", use_container_width=True)
+            if submit:
+                if pwd == ADMIN_PASSWORD:
+                    st.session_state["authenticated"] = True
+                    st.rerun()
+                else:
+                    st.error(random.choice(ADMIN_PASSWORD_ERROR_MESSAGES))
+
+    dynamic_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    st.markdown(
+        f"<p style='text-align: center; color: gray; font-size: 14px; margin-top: 20px;'>"
+        f"Data refreshed: {dynamic_time}</p>",
+        unsafe_allow_html=True,
+    )
     return False
 
 
 st.set_page_config(page_title="Financial File Merger & Formatter", layout="wide")
+
+# ==========================================
+# 🛡️ HIDE STREAMLIT MENU
+# ==========================================
+# As supplied, this sets visibility: show — i.e. the hamburger menu, header,
+# toolbar, and footer all stay VISIBLE. Flip any of these to "hidden" if you
+# actually want that element hidden from viewers.
+hide_streamlit_ui = """
+<style>
+    #MainMenu {visibility: show;}
+    header {visibility: show;}
+    [data-testid="stToolbar"] {visibility: show;}
+    footer {visibility: show;}
+</style>
+"""
+st.markdown(hide_streamlit_ui, unsafe_allow_html=True)
+
+# ==========================================
+# 🛡️ HIDE GITHUB ICON ONLY
+# ==========================================
+hide_github_icon = """
+<style>
+    [data-testid="stToolbar"] {
+        right: 2rem;
+    }
+    [data-testid="stToolbar"]::before {
+        content: "";
+    }
+    button[kind="header"] {display: none;}
+</style>
+"""
+st.markdown(hide_github_icon, unsafe_allow_html=True)
 
 if not check_login():
     st.stop()
@@ -424,21 +500,11 @@ MASTER_NUMBER_FORMATS = {
 #     Excel (Format -> Hide & Unhide -> Hide Columns). Unhiding in Excel itself
 #     always works regardless of this flag.
 MASTER_HIDE_COLUMNS = [
-    "ISIN",
-    "Series",
-    "Company Name (Capital)",
     "Company Name",
-    "Date of Listing",
-    "Trade Date",
-    "Segment",
-    "T0 Tag",
-    "Remarks",
-    "Face Value",
     "Market Lot",
     "Mkt Cap (Rs. Crores)",
     "Value (Rs. Crores)",
     "Volume (Lakhs)",
-    "Band",
     "Open (Rs.)",
     "High (Rs.)",
     "Low (Rs.)",
