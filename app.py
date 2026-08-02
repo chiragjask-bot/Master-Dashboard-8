@@ -350,7 +350,7 @@ MASTER_FIELD_MAP = [
     {"label": "Company Name (Capital)", "sheet": "BhavCopy_NSE_CM",
      "aliases": ["FinInstrmNm", "NAME OF COMPANY", "Name Of Company", "Security Name", "SECURITY", "Security",
                  "COMPANY NAME", "COMPANY'S NAME", "Company Name", "Company's Name"], "format": "text"},
-    {"label": "Company Name", "sheet": "EQUITY_L",
+    {"label": "Company Name", "sheet": ["EQUITY_L", "SME_EQUITY_L"],
      "aliases": ["NAME OF COMPANY", "Name Of Company", "Security Name", "SECURITY", "Security",
                  "COMPANY NAME", "COMPANY'S NAME", "Company Name", "Company's Name"], "format": "text"},
     {"label": "Date of Listing", "sheet": "EQUITY_L", "aliases": ["DATE OF LISTING"], "format": "date"},
