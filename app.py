@@ -120,6 +120,7 @@ DEFAULT_COLUMN_ORDER = {
     "SME_EQUITY_L": ["SYMBOL", "ISIN_NUMBER", "NAME_OF_COMPANY", "SERIES", "DATE_OF_LISTING",
                      "PAID_UP_VALUE", "FACE_VALUE"],
     "Eligible_T0_Securities": ["Symbol", "Name Of Company", "Series", "Effective Date"],
+    "mcap": ["Symbol", "Security Name", "Series", "Face Value(Rs.)", "Market Cap(Rs.)", "Issue Size", "Close Price/Paid up value(Rs.)", "Trade Date", "Last Trade Date"],
     "pd": ["SYMBOL", "SECURITY", "SERIES", "PREV_CL_PR", "OPEN_PRICE", "HIGH_PRICE", "LOW_PRICE",
            "CLOSE_PRICE", "NET_TRDVAL", "NET_TRDQTY", "TRADES", "HI_52_WK", "LO_52_WK"],
     "pr": ["SECURITY", "PREV_CL_PR", "OPEN_PRICE", "HIGH_PRICE", "LOW_PRICE", "CLOSE_PRICE",
