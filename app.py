@@ -7,6 +7,7 @@ import os
 import zipfile
 import gzip
 from datetime import datetime
+from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.worksheet.datavalidation import DataValidation
 
@@ -415,6 +416,63 @@ MASTER_NUMBER_FORMATS = {
 }
 
 
+# 2c. Column-hide feature (feature request: "add hide column feature in tab name:
+#     Master_Dashboard-8"). Fixed list of Master_Dashboard-8 columns that can be
+#     hidden/unhidden as a group with a single on/off toggle in the UI. The columns
+#     still exist in the sheet and in every download — "hidden" here is openpyxl's
+#     column_dimensions[...].hidden flag, exactly like manually hiding a column in
+#     Excel (Format -> Hide & Unhide -> Hide Columns). Unhiding in Excel itself
+#     always works regardless of this flag.
+MASTER_HIDE_COLUMNS = [
+    "Company Name",
+    "Market Lot",
+    "Mkt Cap (Rs. Crores)",
+    "Value (Rs. Crores)",
+    "Volume (Lakhs)",
+    "Open (Rs.)",
+    "High (Rs.)",
+    "Low (Rs.)",
+    "T0 Effective Date",
+    "Symbol P/E",
+    "Paid Up Value",
+    "Category",
+]
+
+# 2d. Series-column filter defaults (feature request: "filter data need (required
+#     only: EQ, BE, SM, ST) in Tab Name: Master_Dashboard-8"). Both lists are
+#     editable in the UI; these are just the starting values in the text boxes.
+DEFAULT_SERIES_KEEP = "EQ, BE, SM, ST"
+DEFAULT_NAME_EXCLUDE = "ETF, TRUST, REIT, GOLDBONDS, GOI LOAN, GOLD LOAN"
+
+
+def filter_master_dashboard_rows(df, keep_series_csv="", exclude_name_csv=""):
+    """Applies the two Master_Dashboard-8 row filters:
+      1) Keep-list on the 'Series' column (exact match, case/space-insensitive).
+         Leave the box blank to keep every Series value untouched.
+      2) Exclude rows whose Company Name (Capital)/Company Name contains any of
+         the given substrings (case-insensitive), e.g. to drop ETF/TRUST/REIT rows.
+    Returns a new, reset-index DataFrame; never mutates the input.
+    """
+    out = df.copy()
+
+    keep_values = {v.strip().upper() for v in keep_series_csv.split(",") if v.strip()}
+    if keep_values and "Series" in out.columns:
+        out = out[out["Series"].astype(str).str.strip().str.upper().isin(keep_values)]
+
+    exclude_terms = [v.strip().upper() for v in exclude_name_csv.split(",") if v.strip()]
+    if exclude_terms:
+        name_cols = [c for c in ["Company Name (Capital)", "Company Name"] if c in out.columns]
+        if name_cols:
+            mask = pd.Series(False, index=out.index)
+            for c in name_cols:
+                col_upper = out[c].astype(str).str.upper()
+                for term in exclude_terms:
+                    mask = mask | col_upper.str.contains(re.escape(term), na=False)
+            out = out[~mask]
+
+    return out.reset_index(drop=True)
+
+
 def get_active_master_field_map():
     """MASTER_FIELD_MAP plus any custom columns the person has added via the
     'Add a column from any tab' box in the UI. Custom columns live only in
@@ -426,6 +484,22 @@ def md_normalize_header(text) -> str:
     if text is None:
         return ""
     return " ".join(str(text).strip().lower().split())
+
+
+def build_master_alias_lookup(field_map):
+    """Maps each source sheet name -> the set of normalized column-name aliases
+    that the given Master_Dashboard-8 field map (MASTER_FIELD_MAP, or the active
+    field map including custom columns) pulls from it. Used to highlight, on the
+    '⬆️ Main Tab' hub sheet, exactly which columns of each source tab feed into
+    Master_Dashboard-8 (feature request: "highlight particular text ... take
+    reference of MASTER_FIELD_MAP")."""
+    lookup = {}
+    for f in field_map:
+        sheets = f["sheet"] if isinstance(f["sheet"], list) else [f["sheet"]]
+        aliases_norm = {md_normalize_header(a) for a in f["aliases"]}
+        for s in sheets:
+            lookup.setdefault(s, set()).update(aliases_norm)
+    return lookup
 
 
 def md_find_header_row(ws, all_aliases_norm: set, scan_rows: int = MASTER_HEADER_SCAN_ROWS) -> int:
@@ -527,13 +601,17 @@ def md_build_master_dashboard(wb, field_map=None):
     return df, log
 
 
-def md_write_master_sheet(wb, df, column_order=None, field_map=None):
+def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_columns=None):
     """Adds/overwrites Master_Dashboard-8 directly on the same workbook object.
     column_order: optional list of field labels (subset/reordered) controlling
     which columns appear and in what order. Defaults to the full field_map.
     field_map: optional field list to use instead of the base MASTER_FIELD_MAP — pass
-    get_active_master_field_map() to include any custom columns the user has added."""
+    get_active_master_field_map() to include any custom columns the user has added.
+    hide_columns: optional iterable of field labels to hide (openpyxl column
+    'hidden' flag) on this sheet — pass MASTER_HIDE_COLUMNS when the "hide
+    columns" toggle is on, or None/[] to leave every column visible."""
     field_map = field_map if field_map is not None else MASTER_FIELD_MAP
+    hide_set = {md_normalize_header(h) for h in (hide_columns or [])}
     if MASTER_SHEET_NAME in wb.sheetnames:
         del wb[MASTER_SHEET_NAME]
     ws = wb.create_sheet(MASTER_SHEET_NAME)
@@ -567,7 +645,10 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None):
             cell.border = border
 
     for c in range(1, len(labels) + 1):
-        ws.column_dimensions[ws.cell(row=1, column=c).column_letter].width = 20
+        col_letter = ws.cell(row=1, column=c).column_letter
+        ws.column_dimensions[col_letter].width = 20
+        if md_normalize_header(labels[c - 1]) in hide_set:
+            ws.column_dimensions[col_letter].hidden = True
 
     # Freeze BOTH the header row and the first column (feature request:
     # "freeze 1st column & 1st row in Tab Name: Master_Dashboard-8").
@@ -1417,12 +1498,60 @@ if all_candidate_files or custom_tab_files:
         )
 
         st.markdown("---")
+        st.subheader("🙈 Master_Dashboard-8 — hide/unhide columns")
+        st.caption(
+            "One on/off switch hides this fixed list of columns (as Excel column-hide, "
+            "not deletion — the data stays in the sheet, just collapsed) in "
+            "Master_Dashboard-8: " + ", ".join(MASTER_HIDE_COLUMNS)
+        )
+        st.checkbox(
+            "Hide these columns in Master_Dashboard-8",
+            key="master_hide_cols_toggle",
+        )
+
+        st.markdown("---")
+        st.subheader("🔀 Master_Dashboard-8 — Series filter")
+        st.caption(
+            "Row filters applied only to Master_Dashboard-8. Leave a box empty to skip "
+            "that filter."
+        )
+        series_filter_col, name_filter_col = st.columns(2)
+        with series_filter_col:
+            st.text_input(
+                "✅ Keep only these Series values (comma-separated)",
+                value=st.session_state.get("series_keep_input", DEFAULT_SERIES_KEEP),
+                key="series_keep_input",
+                help="e.g. EQ, BE, SM, ST — any Series value not in this list is dropped "
+                     "from Master_Dashboard-8.",
+            )
+        with name_filter_col:
+            st.text_input(
+                "🗑 Delete rows where Company Name contains (comma-separated)",
+                value=st.session_state.get("exclude_name_input", DEFAULT_NAME_EXCLUDE),
+                key="exclude_name_input",
+                help="e.g. ETF, TRUST, REIT — rows whose Company Name / Company Name "
+                     "(Capital) contains any of these (case-insensitive) are dropped.",
+            )
+
+        st.markdown("---")
 
         if st.button("🚀 Execute Structural Consolidation", type="primary"):
             output_stream = io.BytesIO()
 
             NAV_ROW = 1  # excel row 1 on every data sheet is reserved for the "⬆️ Main Tab" jump-back link
             LINK_FONT = Font(color="0563C1", underline="single", bold=True)
+
+            # Computed early (before the Main Tab hub sheet is built below) so the
+            # same field map drives both the Main-Tab highlight and the
+            # Master_Dashboard-8 build later in this same block.
+            exec_field_map = get_active_master_field_map()
+            master_alias_lookup = build_master_alias_lookup(exec_field_map)
+            MASTER_HIGHLIGHT_MAIN_TAB_COLOR = "FFF2CC"  # light yellow
+            main_tab_highlight_fill = PatternFill(
+                start_color=MASTER_HIGHLIGHT_MAIN_TAB_COLOR,
+                end_color=MASTER_HIGHLIGHT_MAIN_TAB_COLOR,
+                fill_type="solid",
+            )
 
             with pd.ExcelWriter(output_stream, engine='openpyxl') as writer:
                 exportable_tabs = [t for t in ALL_TABS if t in processed_dataframes]
@@ -1433,6 +1562,8 @@ if all_candidate_files or custom_tab_files:
                 main_ws["A1"].font = Font(bold=True, size=14)
                 main_ws["A3"] = "Click a tab name below to jump straight to that sheet."
                 main_ws["A3"].font = Font(italic=True)
+                main_ws["A4"] = "🟡 Highlighted columns below feed into Master_Dashboard-8 (see MASTER_FIELD_MAP)."
+                main_ws["A4"].font = Font(italic=True)
 
                 header_row_num = 5
                 fixed_headers = ["Tab Name", "Rows", "Columns"]
@@ -1455,8 +1586,12 @@ if all_candidate_files or custom_tab_files:
                     main_ws.cell(row=row, column=2, value=len(tab_df))
                     main_ws.cell(row=row, column=3, value=len(tab_df.columns))
 
+                    tab_aliases = master_alias_lookup.get(tab, set())
                     for c_idx, col_name in enumerate(tab_df.columns, start=4):
-                        main_ws.cell(row=row, column=c_idx, value=str(col_name))
+                        col_cell = main_ws.cell(row=row, column=c_idx, value=str(col_name))
+                        if md_normalize_header(col_name) in tab_aliases:
+                            col_cell.fill = main_tab_highlight_fill
+                            col_cell.font = Font(bold=True)
 
                 main_ws.column_dimensions['A'].width = 45
                 main_ws.column_dimensions['B'].width = 12
@@ -1588,14 +1723,42 @@ if all_candidate_files or custom_tab_files:
                 # Reads straight off writer.book, which already holds every tab
                 # just written above, and appends the joined sheet to it.
                 # -----------------------------------------------------------------
-                exec_field_map = get_active_master_field_map()
                 master_df, master_log = md_build_master_dashboard(writer.book, field_map=exec_field_map)
+
+                # Row filters: keep-list on Series, exclude-list on Company Name.
+                rows_before_filter = len(master_df)
+                master_df = filter_master_dashboard_rows(
+                    master_df,
+                    keep_series_csv=st.session_state.get("series_keep_input", ""),
+                    exclude_name_csv=st.session_state.get("exclude_name_input", ""),
+                )
+                rows_after_filter = len(master_df)
+
                 active_master_order = st.session_state.get(
                     "master_col_order", [f["label"] for f in exec_field_map]
                 )
-                md_write_master_sheet(
-                    writer.book, master_df, column_order=active_master_order, field_map=exec_field_map
+                master_hide_columns = (
+                    MASTER_HIDE_COLUMNS if st.session_state.get("master_hide_cols_toggle") else None
                 )
+                md_write_master_sheet(
+                    writer.book, master_df, column_order=active_master_order,
+                    field_map=exec_field_map, hide_columns=master_hide_columns,
+                )
+
+            # ---------------------------------------------------------------------
+            # Feature request: "at time both excel sheet download" — a second,
+            # separate workbook containing ONLY the Master_Dashboard-8 sheet, built
+            # from the exact same (already-filtered) master_df, so it always matches
+            # the combined file above.
+            # ---------------------------------------------------------------------
+            master_only_wb = Workbook()
+            master_only_wb.remove(master_only_wb.active)
+            md_write_master_sheet(
+                master_only_wb, master_df, column_order=active_master_order,
+                field_map=exec_field_map, hide_columns=master_hide_columns,
+            )
+            master_only_stream = io.BytesIO()
+            master_only_wb.save(master_only_stream)
 
             # IMPORTANT: st.button() only reports True on the exact run it was
             # clicked — any later rerun (e.g. from clicking one of the PDF
@@ -1605,10 +1768,13 @@ if all_candidate_files or custom_tab_files:
             # session_state OUTSIDE this button's "if", where it survives reruns.
             st.session_state["consolidation_result"] = {
                 "output_bytes": output_stream.getvalue(),
+                "master_only_output_bytes": master_only_stream.getvalue(),
                 "master_df": master_df,
                 "active_master_order": active_master_order,
                 "master_log": master_log,
                 "processed_dataframes": processed_dataframes,
+                "rows_before_filter": rows_before_filter,
+                "rows_after_filter": rows_after_filter,
             }
             # Clear any stale PDFs from a previous run so old data can't be re-downloaded.
             st.session_state.pop("all_tabs_pdf_bytes", None)
@@ -1627,6 +1793,14 @@ if all_candidate_files or custom_tab_files:
             master_log = result["master_log"]
             processed_dataframes = result["processed_dataframes"]
 
+            rows_before_filter = result.get("rows_before_filter")
+            rows_after_filter = result.get("rows_after_filter")
+            if rows_before_filter is not None and rows_after_filter is not None and rows_before_filter != rows_after_filter:
+                st.caption(
+                    f"🔀 Series/Company-Name filters kept {rows_after_filter} of "
+                    f"{rows_before_filter} Master_Dashboard-8 rows."
+                )
+
             if master_log:
                 with st.expander(f"⚠️ Master_Dashboard-8: {len(master_log)} warning(s)"):
                     for line in master_log:
@@ -1642,14 +1816,24 @@ if all_candidate_files or custom_tab_files:
 
             ts = datetime.now().strftime('%Y%m%d_%H%M')
 
-            st.download_button(
-                label="📥 Download Formatted Master File",
-                data=result["output_bytes"],
-                file_name=f"Master_Financial_Data_{ts}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary",
-                key="download_xlsx_btn",
-            )
+            dl_col1, dl_col2 = st.columns(2)
+            with dl_col1:
+                st.download_button(
+                    label="📥 Download Formatted Master File",
+                    data=result["output_bytes"],
+                    file_name=f"Master_Financial_Data_{ts}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary",
+                    key="download_xlsx_btn",
+                )
+            with dl_col2:
+                st.download_button(
+                    label="📥 Download Master_Dashboard-8 Only (separate Excel)",
+                    data=result["master_only_output_bytes"],
+                    file_name=f"Master_Dashboard-8_{ts}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="download_master_only_xlsx_btn",
+                )
 
             st.markdown("---")
             st.subheader("📄 PDF Export")
