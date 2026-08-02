@@ -472,7 +472,9 @@ def md_build_master_dashboard(wb, field_map=None):
 
     fields_by_sheet = {}
     for f in field_map:
-        fields_by_sheet.setdefault(f["sheet"], []).append(f)
+    sheets = f["sheet"] if isinstance(f["sheet"], list) else [f["sheet"]]
+    for s in sheets:
+        fields_by_sheet.setdefault(s, []).append(f)
 
     master_data = {}
     symbol_order = []
