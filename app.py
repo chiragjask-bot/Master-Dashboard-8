@@ -345,15 +345,15 @@ MAX_BOX_DISPLAY_ROWS = 20000
 
 MASTER_FIELD_MAP = [
     {"label": "Symbol", "sheet": "BhavCopy_NSE_CM", "aliases": ["TckrSymb", "SYMBOL", "Symb"], "format": "text", "isKey": True},
-    {"label": "ISIN", "sheet": "BhavCopy_NSE_CM", "aliases": ["ISIN", "ISIN NUMBER"], "format": "text"},
+    {"label": "ISIN", "sheet": "BhavCopy_NSE_CM", "aliases": ["ISIN", "ISIN NUMBER", "ISIN_NUMBER"], "format": "text"},
     {"label": "Series", "sheet": "BhavCopy_NSE_CM", "aliases": ["SctySrs", "SERIES", "Series", "Srs"], "format": "text"},
     {"label": "Company Name (Capital)", "sheet": "BhavCopy_NSE_CM",
      "aliases": ["FinInstrmNm", "NAME OF COMPANY", "Name Of Company", "Security Name", "SECURITY", "Security",
                  "COMPANY NAME", "COMPANY'S NAME", "Company Name", "Company's Name"], "format": "text"},
     {"label": "Company Name", "sheet": "EQUITY_L",
      "aliases": ["NAME OF COMPANY", "Name Of Company", "Security Name", "SECURITY", "Security",
-                 "COMPANY NAME", "COMPANY'S NAME", "Company Name", "Company's Name"], "format": "text"},
-    {"label": "Date of Listing", "sheet": "EQUITY_L", "aliases": ["DATE OF LISTING"], "format": "date"},
+                 "COMPANY NAME", "NAME OF COMPANY", "NAME_OF_COMPANY", "COMPANY'S NAME", "Company Name", "Company's Name"], "format": "text"},
+    {"label": "Date of Listing", "sheet": "EQUITY_L", "aliases": ["DATE OF LISTING", "DATE_OF_LISTING", "LISTING DATE", "LISTING_DATE", "LISTING DT", ], "format": "date"},
     {"label": "Trade Date", "sheet": "BhavCopy_NSE_CM", "aliases": ["TradDt", "Trade Date"], "format": "date"},
     {"label": "Segment", "sheet": "BhavCopy_NSE_CM", "aliases": ["Src"], "format": "text"},
     {"label": "Market Lot", "sheet": "BhavCopy_NSE_CM", "aliases": ["NewBrdLotQty", "MARKET LOT", "Market Lot"], "format": "qty"},
