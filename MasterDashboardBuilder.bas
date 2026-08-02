@@ -29,14 +29,14 @@ Private Function GetFieldMap() As Variant
         Array("ISIN", "BhavCopy_NSE_CM", "ISIN|ISIN NUMBER", "text", False), _
         Array("Series", "BhavCopy_NSE_CM", "SctySrs|SERIES|Series|Srs", "text", False), _
         Array("Company Name (Capital)", "BhavCopy_NSE_CM", "FinInstrmNm|NAME OF COMPANY|Name Of Company|Security Name|SECURITY|Security|COMPANY NAME|COMPANY'S NAME|Company Name|Company's Name", "text", False), _
-        Array("Company Name", "EQUITY_L|SME_EQUITY_L", "NAME OF COMPANY|Name Of Company|Security Name|SECURITY|Security|COMPANY NAME|COMPANY'S NAME|Company Name|Company's Name", "text", False), _
-        Array("Date of Listing", "EQUITY_L|SME_EQUITY_L", "DATE OF LISTING", "date", False), _
+        Array("Company Name", "EQUITY_L", "NAME OF COMPANY|Name Of Company|Security Name|SECURITY|Security|COMPANY NAME|COMPANY'S NAME|Company Name|Company's Name", "text", False), _
+        Array("Date of Listing", "EQUITY_L", "DATE OF LISTING", "date", False), _
         Array("Trade Date", "BhavCopy_NSE_CM", "TradDt|Trade Date", "date", False), _
         Array("Segment", "BhavCopy_NSE_CM", "Src", "text", False), _
         Array("Market Lot", "BhavCopy_NSE_CM", "NewBrdLotQty|MARKET LOT|Market Lot", "qty", False), _
         Array("T0 Tag", "Eligible_T0_Securities", "SERIES|SctySrs|Srs|Series", "text", False), _
         Array("Remarks", "sec_list", "Remarks", "text", False), _
-        Array("Face Value", "EQUITY_L|SME_EQUITY_L", "FACE VALUE|Face Value(Rs.)", "price", False), _
+        Array("Face Value", "EQUITY_L", "FACE VALUE|Face Value(Rs.)", "price", False), _
         Array("No. of Trades", "BhavCopy_NSE_CM", "TtlNbOfTxsExctd|No. of Trades|NO OF TRADES|TRADES|Trade|NO_OF_TRADES", "qty", False), _
         Array("Traded Qty", "BhavCopy_NSE_CM", "TtlTradgVol|TTL TRD QNTY|TRADED QUANTITY|NET_TRDQTY|Traded Qty|NET TRD QTY|NET TRDQTY|TTL_TRD_QNTY", "qty", False), _
         Array("Delivery Qty", "sec_bhavdata_full", "DELIV QTY|DELIV QUANTITY|Delivery quantity|DELIVERY QNTY|DELIV_QNTY|DELIV QNTY|DELIV_QTY", "qty", False), _
@@ -64,7 +64,7 @@ Private Function GetFieldMap() As Variant
         Array("Symbol P/E", "PE", "SYMBOL P/E|Symbol P/E", "ratio", False), _
         Array("Adjusted P/E", "PE", "ADJUSTED P/E|Adjusted P/E", "ratio", False), _
         Array("T0 Effective Date", "Eligible_T0_Securities", "Effective Date", "text", False), _
-        Array("Paid Up Value", "EQUITY_L|SME_EQUITY_L", "PAID UP VALUE", "price", False), _
+        Array("Paid Up Value", "EQUITY_L", "PAID UP VALUE", "price", False), _
         Array("Category", "mcap", "Category", "text", False) _
     )
 End Function
