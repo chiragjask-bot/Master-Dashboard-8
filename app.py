@@ -130,7 +130,7 @@ st.markdown(hide_github_icon, unsafe_allow_html=True)
 if not check_login():
     st.stop()
 
-st.title("📊 Financial Data File Merger & Formatter")
+st.title("📊 Data File-8")
 st.markdown('<div id="main_tab"></div>', unsafe_allow_html=True)
 
 
