@@ -465,6 +465,7 @@ def md_build_master_dashboard(wb, field_map=None):
     field_map: optional field list to use instead of the base MASTER_FIELD_MAP — pass
     get_active_master_field_map() to include any custom columns the user has added."""
     field_map = field_map if field_map is not None else MASTER_FIELD_MAP
+    log = []
     all_aliases = list(MASTER_SYMBOL_ALIASES)
     for f in field_map:
         all_aliases += f["aliases"]
