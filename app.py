@@ -126,7 +126,7 @@ DEFAULT_COLUMN_ORDER = {
            "NET_TRDVAL", "NET_TRDQTY", "TRADES", "HI_52_WK", "LO_52_WK", "IND_SEC", "CORP_IND"],
     "bc": ["SYMBOL", "SECURITY", "SERIES", "PURPOSE", "RECORD_DT", "EX_DT"],
     "tt": ["SECURITY", "NET_TRDVAL", "NET_TRDQTY", "PREV_CL_PR", "CLOSE_PRIC"],
-    "BhavCopy_NSE_CM": ["ISIN", "TckrSymb", "FinInstrmNm", "TtlTradgVol", "TtlTrfVal",
+    "BhavCopy_NSE_CM": ["TckrSymb", "ISIN", "FinInstrmNm", "TtlTradgVol", "TtlTrfVal",
                         "TtlNbOfTxsExctd", "PrvsClsgPric", "ClsPric", "LastPric", "OpnPric",
                         "HghPric", "LwPric", "SttlmPric", "NewBrdLotQty", "Sgmt", "FinInstrmId",
                         "Src", "SctySrs", "SsnId"],
