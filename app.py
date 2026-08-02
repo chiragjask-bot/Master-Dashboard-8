@@ -203,6 +203,7 @@ CUSTOM_FREEZE_ROWS = {}
 NAV_LINK_CELL_OVERRIDES = {
     "Eligible_T0_Securities": "B1",
     "MA": "B1",
+    "mrg_trading": "B1",
 }
 
 
