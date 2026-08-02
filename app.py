@@ -369,7 +369,7 @@ MASTER_FIELD_MAP = [
      "aliases": ["TtlTrfVal", "NET_TRDVAL", "NET_TRD_VAL", "NET TRD VAL", "NET TRDVAL", "Turnover (Rs.)", "NET TRADED VALUE", "Net Traded Value", "Traded Value"], "format": "qty"},
     {"label": "Issue Size", "sheet": "mcap", "aliases": ["Issue Size"], "format": "qty"},
     {"label": "Mkt Cap (Rs. Crores)", "sheet": "StocksTraded", "aliases": ["Mkt Cap (Rs Crores)", "Mkt Cap (\u20b9 Crores)", "Market Cap (\u20b9 Crores)"], "format": "crores"},
-    {"label": "Mkt Cap (Rs.)", "sheet": "mcap", "aliases": ["Market Cap(Rs.)", "Mkt Cap(Rs.)", "Market Cap (Rs.)", "Mkt Cap (Rs.)", "Market Cap(Rs)", "Mkt Cap(Rs)", "Market Cap (Rs)", "Mkt Cap (Rs)"], "format": "qty"},
+    {"label": "Market Cap(Rs.)", "sheet": "mcap", "aliases": ["Market Cap(Rs.)", "Mkt Cap(Rs.)", "Market Cap (Rs.)", "Mkt Cap (Rs.)", "Market Cap(Rs)", "Mkt Cap(Rs)", "Market Cap (Rs)", "Mkt Cap (Rs)"], "format": "qty"},
     {"label": "Delivery %", "sheet": "sec_bhavdata_full",
      "aliases": ["DELIV PER", "DELIV %", "delivery percentage", "Delivery Percentage (%)", "DELIV_PER"], "format": "percent"},
     {"label": "Value (Rs. Crores)", "sheet": "StocksTraded", "aliases": ["Value (Rs Crores)", "Value (\u20b9 Crores)"], "format": "crores"},
