@@ -468,16 +468,16 @@ def md_build_master_dashboard(wb, field_map=None):
     all_aliases = list(MASTER_SYMBOL_ALIASES)
     for f in field_map:
         all_aliases += f["aliases"]
-all_aliases_norm = {md_normalize_header(a) for a in all_aliases}
+    all_aliases_norm = {md_normalize_header(a) for a in all_aliases}
 
-fields_by_sheet = {}
-for f in field_map:
-    sheets = f["sheet"] if isinstance(f["sheet"], list) else [f["sheet"]]
-    for s in sheets:
-        fields_by_sheet.setdefault(s, []).append(f)
+    fields_by_sheet = {}
+    for f in field_map:
+        sheets = f["sheet"] if isinstance(f["sheet"], list) else [f["sheet"]]
+        for s in sheets:
+            fields_by_sheet.setdefault(s, []).append(f)
 
-master_data = {}
-symbol_order = []
+    master_data = {}
+    symbol_order = []
 
     for sheet_name, fields in fields_by_sheet.items():
         if sheet_name not in wb.sheetnames:
