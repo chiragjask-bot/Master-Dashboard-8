@@ -359,7 +359,7 @@ MASTER_FIELD_MAP = [
     {"label": "Market Lot", "sheet": "BhavCopy_NSE_CM", "aliases": ["NewBrdLotQty", "MARKET LOT", "Market Lot"], "format": "qty"},
     {"label": "T0 Tag", "sheet": "Eligible_T0_Securities", "aliases": ["SERIES", "SctySrs", "Srs", "Series"], "format": "text"},
     {"label": "Remarks", "sheet": "sec_list", "aliases": ["Remarks"], "format": "text"},
-    {"label": "Face Value", "sheet": "EQUITY_L", "aliases": ["FACE VALUE", "Face Value(Rs.)"], "format": "price"},
+    {"label": "Face Value", "sheet": "EQUITY_L", "aliases": ["FACE VALUE", "FACE_VALUE", "Face Value(Rs.)"], "format": "price"},
     {"label": "No. of Trades", "sheet": "BhavCopy_NSE_CM", "aliases": ["TtlNbOfTxsExctd", "No. of Trades", "NO OF TRADES", "TRADES", "Trade", "NO_OF_TRADES"], "format": "qty"},
     {"label": "Traded Qty", "sheet": "BhavCopy_NSE_CM",
      "aliases": ["TtlTradgVol", "TTL TRD QNTY", "TRADED QUANTITY", "NET_TRDQTY", "Traded Qty", "NET TRD QTY", "NET TRDQTY", "TTL_TRD_QNTY"], "format": "qty"},
@@ -395,7 +395,7 @@ MASTER_FIELD_MAP = [
     {"label": "Symbol P/E", "sheet": "PE", "aliases": ["SYMBOL P/E", "Symbol P/E"], "format": "ratio"},
     {"label": "Adjusted P/E", "sheet": "PE", "aliases": ["ADJUSTED P/E", "Adjusted P/E"], "format": "ratio"},
     {"label": "T0 Effective Date", "sheet": "Eligible_T0_Securities", "aliases": ["Effective Date"], "format": "text"},
-    {"label": "Paid Up Value", "sheet": "EQUITY_L", "aliases": ["PAID UP VALUE"], "format": "price"},
+    {"label": "Paid Up Value", "sheet": "EQUITY_L", "aliases": ["PAID UP VALUE", "PAID_UP_VALUE"], "format": "price"},
     {"label": "Category", "sheet": "mcap", "aliases": ["Category"], "format": "text"},
 ]
 
