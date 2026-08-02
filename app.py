@@ -396,7 +396,7 @@ MASTER_FIELD_MAP = [
      "aliases": ["52_Week_Low_DT", "52 Week Low Date", "52 W Low Date", "52 W Low Dt.", "52W Low Dt."], "format": "date"},
     {"label": "Symbol P/E", "sheet": "PE", "aliases": ["SYMBOL P/E", "Symbol P/E"], "format": "ratio"},
     {"label": "Adjusted P/E", "sheet": "PE", "aliases": ["ADJUSTED P/E", "Adjusted P/E"], "format": "ratio"},
-    {"label": "T0 Effective Date", "sheet": "Eligible_T0_Securities", "aliases": ["Effective Date"], "format": ["date", "text"]},
+    {"label": "T0 Effective Date", "sheet": "Eligible_T0_Securities", "aliases": ["Effective Date"], "format": "date"},
     {"label": "Paid Up Value", "sheet": ["EQUITY_L", "SME_EQUITY_L"],
      "aliases": ["PAID UP VALUE", "PAID_UP_VALUE"], "format": "price"},
     {"label": "Category", "sheet": "mcap", "aliases": ["Category"], "format": "text"},
