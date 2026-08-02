@@ -205,16 +205,21 @@ Public Sub BuildMasterDashboard()
         Next a
     Next i
 
-    ' Group field indices by source sheet name.
+    ' Group field indices by source sheet name (supports single sheets or pipe-delimited sheets).
     Dim sheetFieldIdx As Object: Set sheetFieldIdx = CreateObject("Scripting.Dictionary")
     For i = lo To hi
-        Dim sn As String: sn = fieldMap(i)(1)
-        If Not sheetFieldIdx.Exists(sn) Then
-            Dim newColl As Collection: Set newColl = New Collection
-            sheetFieldIdx.Add sn, newColl
-        End If
-        sheetFieldIdx(sn).Add i
+        Dim sheetNames As Variant: sheetNames = Split(fieldMap(i)(1), "|")
+        Dim sVar As Variant
+        For Each sVar In sheetNames
+            Dim sn As String: sn = Trim(CStr(sVar))
+            If Not sheetFieldIdx.Exists(sn) Then
+                Dim newColl As Collection: Set newColl = New Collection
+                sheetFieldIdx.Add sn, newColl
+            End If
+            sheetFieldIdx(sn).Add i
+        Next sVar
     Next i
+
 
     Dim masterData As Object: Set masterData = CreateObject("Scripting.Dictionary")  ' Symbol -> Dictionary(label->value)
     Dim symbolOrder As Collection: Set symbolOrder = New Collection
