@@ -361,7 +361,7 @@ MASTER_FIELD_MAP = [
     {"label": "T0 Tag", "sheet": "Eligible_T0_Securities", "aliases": ["SERIES", "SctySrs", "Srs", "Series"], "format": "text"},
     {"label": "Remarks", "sheet": "sec_list", "aliases": ["Remarks"], "format": "text"},
     {"label": "Face Value", "sheet": ["EQUITY_L", "SME_EQUITY_L"],
-     aliases": ["FACE VALUE", "FACE_VALUE", "Face Value(Rs.)"], "format": "price"},
+     "aliases": ["FACE VALUE", "FACE_VALUE", "Face Value(Rs.)"], "format": "price"},
     {"label": "No. of Trades", "sheet": "BhavCopy_NSE_CM", "aliases": ["TtlNbOfTxsExctd", "No. of Trades", "NO OF TRADES", "TRADES", "Trade", "NO_OF_TRADES"], "format": "qty"},
     {"label": "Traded Qty", "sheet": "BhavCopy_NSE_CM",
      "aliases": ["TtlTradgVol", "TTL TRD QNTY", "TRADED QUANTITY", "NET_TRDQTY", "Traded Qty", "NET TRD QTY", "NET TRDQTY", "TTL_TRD_QNTY"], "format": "qty"},
