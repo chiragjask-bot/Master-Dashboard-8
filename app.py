@@ -500,11 +500,21 @@ MASTER_NUMBER_FORMATS = {
 #     Excel (Format -> Hide & Unhide -> Hide Columns). Unhiding in Excel itself
 #     always works regardless of this flag.
 MASTER_HIDE_COLUMNS = [
+    "ISIN",
+    "Series",
+    "Company Name (Capital)",
     "Company Name",
+    "Date of Listing",
+    "Trade Date",
+    "Segment",
+    "T0 Tag",
+    "Remarks",
+    "Face Value",
     "Market Lot",
     "Mkt Cap (Rs. Crores)",
     "Value (Rs. Crores)",
     "Volume (Lakhs)",
+    "Band",
     "Open (Rs.)",
     "High (Rs.)",
     "Low (Rs.)",
