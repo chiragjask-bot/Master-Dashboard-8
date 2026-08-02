@@ -26,44 +26,46 @@ Private Const HEADER_FILL_RGB As Long = 15121130   ' RGB(234,209,220) = EAD1DC
 Private Function GetFieldMap() As Variant
     GetFieldMap = Array( _
         Array("Symbol", "BhavCopy_NSE_CM", "TckrSymb|SYMBOL|Symb", "text", True), _
-        Array("Series", "BhavCopy_NSE_CM", "SctySrs|SERIES|Series|Srs", "text", False), _
         Array("ISIN", "BhavCopy_NSE_CM", "ISIN|ISIN NUMBER", "text", False), _
+        Array("Series", "BhavCopy_NSE_CM", "SctySrs|SERIES|Series|Srs", "text", False), _
         Array("Company Name (Capital)", "BhavCopy_NSE_CM", "FinInstrmNm|NAME OF COMPANY|Name Of Company|Security Name|SECURITY|Security|COMPANY NAME|COMPANY'S NAME|Company Name|Company's Name", "text", False), _
+        Array("Company Name", "EQUITY_L|SME_EQUITY_L", "NAME OF COMPANY|Name Of Company|Security Name|SECURITY|Security|COMPANY NAME|COMPANY'S NAME|Company Name|Company's Name", "text", False), _
+        Array("Date of Listing", "EQUITY_L|SME_EQUITY_L", "DATE OF LISTING", "date", False), _
         Array("Trade Date", "BhavCopy_NSE_CM", "TradDt|Trade Date", "date", False), _
         Array("Segment", "BhavCopy_NSE_CM", "Src", "text", False), _
+        Array("Market Lot", "BhavCopy_NSE_CM", "NewBrdLotQty|MARKET LOT|Market Lot", "qty", False), _
+        Array("T0 Tag", "Eligible_T0_Securities", "SERIES|SctySrs|Srs|Series", "text", False), _
+        Array("Remarks", "sec_list", "Remarks", "text", False), _
+        Array("Face Value", "EQUITY_L|SME_EQUITY_L", "FACE VALUE|Face Value(Rs.)", "price", False), _
+        Array("No. of Trades", "BhavCopy_NSE_CM", "TtlNbOfTxsExctd|No. of Trades|NO OF TRADES|TRADES|Trade|NO_OF_TRADES", "qty", False), _
+        Array("Traded Qty", "BhavCopy_NSE_CM", "TtlTradgVol|TTL TRD QNTY|TRADED QUANTITY|NET_TRDQTY|Traded Qty|NET TRD QTY|NET TRDQTY|TTL_TRD_QNTY", "qty", False), _
+        Array("Delivery Qty", "sec_bhavdata_full", "DELIV QTY|DELIV QUANTITY|Delivery quantity|DELIVERY QNTY|DELIV_QNTY|DELIV QNTY|DELIV_QTY", "qty", False), _
+        Array("Turnover (Rs.)", "BhavCopy_NSE_CM", "TtlTrfVal|NET_TRDVAL|NET_TRD_VAL|NET TRD VAL|NET TRDVAL|Turnover (Rs.)|NET TRADED VALUE|Net Traded Value|Traded Value", "qty", False), _
+        Array("Issue Size", "mcap", "Issue Size", "qty", False), _
+        Array("Mkt Cap (Rs. Crores)", "StocksTraded", "Mkt Cap (Rs Crores)|Mkt Cap (₹ Crores)|Market Cap (₹ Crores)", "crores", False), _
+        Array("Market Cap(Rs.)", "mcap", "Market Cap(Rs.)|Mkt Cap(Rs.)|Market Cap (Rs.)|Mkt Cap (Rs.)|Market Cap(Rs)|Mkt Cap(Rs)|Market Cap (Rs)|Mkt Cap (Rs)", "qty", False), _
+        Array("Delivery %", "sec_bhavdata_full", "DELIV PER|DELIV %|delivery percentage|Delivery Percentage (%)|DELIV_PER", "percent", False), _
+        Array("Value (Rs. Crores)", "StocksTraded", "Value (Rs Crores)|Value (₹ Crores)", "crores", False), _
+        Array("Value (Rs.)", "BhavCopy_NSE_CM", "TtlTrfVal|NET_TRDVAL", "qty", False), _
+        Array("Volume (Lakhs)", "StocksTraded", "Volume (Lakhs)", "lakhs", False), _
+        Array("Volume", "BhavCopy_NSE_CM", "TtlTradgVol|NET_TRDQTY", "qty", False), _
+        Array("Band", "sec_list", "Band", "number", False), _
+        Array("% Change", "StocksTraded", "%chng|% Change", "percent", False), _
         Array("Close Price", "BhavCopy_NSE_CM", "ClsPric|CLOSE PRICE|Close Price|CLOSE_PRICE", "price", False), _
         Array("CMP/LTP", "BhavCopy_NSE_CM", "LastPric|LAST PRICE|Last Price|LTP|LAST_PRICE", "price", False), _
         Array("Prev Close", "BhavCopy_NSE_CM", "PrvsClsgPric|PREV CLOSE|Previous close|PREV_CL_PR|PREV_CLOSE", "price", False), _
         Array("Open (Rs.)", "BhavCopy_NSE_CM", "OpnPric|Open Price|OPEN PRICE|OPEN_PRICE", "price", False), _
         Array("High (Rs.)", "BhavCopy_NSE_CM", "HghPric|HIGH PRICE|High Price|HIGH_PRICE", "price", False), _
         Array("Low (Rs.)", "BhavCopy_NSE_CM", "LwPric|Low Price|LOW PRICE|LOW_PRICE", "price", False), _
-        Array("Traded Qty", "BhavCopy_NSE_CM", "TtlTradgVol|TTL TRD QNTY|TRADED QUANTITY|NET_TRDQTY|Traded Qty|NET TRD QTY|NET TRDQTY|TTL_TRD_QNTY", "qty", False), _
-        Array("Turnover (Rs.)", "BhavCopy_NSE_CM", "TtlTrfVal|NET_TRDVAL|NET_TRD_VAL|NET TRD VAL|NET TRDVAL|Turnover (Rs.)|NET TRADED VALUE|Net Traded Value|Traded Value", "qty", False), _
-        Array("No. of Trades", "BhavCopy_NSE_CM", "TtlNbOfTxsExctd|No. of Trades|NO OF TRADES|TRADES|Trade|NO_OF_TRADES", "qty", False), _
-        Array("Market Lot", "BhavCopy_NSE_CM", "NewBrdLotQty|MARKET LOT|Market Lot", "qty", False), _
-        Array("% Change", "StocksTraded", "%chng|% Change", "percent", False), _
-        Array("Volume (Lakhs)", "StocksTraded", "Volume (Lakhs)", "lakhs", False), _
-        Array("Value (Rs. Crores)", "StocksTraded", "Value (Rs Crores)", "crores", False), _
-        Array("Mkt Cap (Rs. Crores)", "StocksTraded", "Mkt Cap (Rs Crores)|Market Cap (Rs Crores)", "crores", False), _
-        Array("Market Cap (Rs.)", "mcap", "Market Cap(Rs.)", "qty", False), _
-        Array("Issue Size", "mcap", "Issue Size", "qty", False), _
-        Array("Category", "mcap", "Category", "text", False), _
-        Array("Company Name", "EQUITY_L", "NAME OF COMPANY|Name Of Company|Security Name|SECURITY|Security|COMPANY NAME|COMPANY'S NAME|Company Name|Company's Name", "text", False), _
-        Array("Date of Listing", "EQUITY_L", "DATE OF LISTING", "date", False), _
-        Array("Paid Up Value", "EQUITY_L", "PAID UP VALUE", "price", False), _
-        Array("Face Value", "EQUITY_L", "FACE VALUE|Face Value(Rs.)", "price", False), _
-        Array("Delivery Qty", "sec_bhavdata_full", "DELIV QTY|DELIV QUANTITY|Delivery quantity|DELIVERY QNTY|DELIV_QNTY|DELIV QNTY|DELIV_QTY", "qty", False), _
-        Array("Delivery %", "sec_bhavdata_full", "DELIV PER|DELIV %|delivery percentage|Delivery Percentage (%)|DELIV_PER", "percent", False), _
         Array("52W High", "CM_52_wk_High_low", "Adjusted_52_Week_High|52_Week_High|52W_High|52 Week High|52W High|HI_52_WK", "price", False), _
         Array("52W High Date", "CM_52_wk_High_low", "52_Week_High_Date|52 Week High Date|52_Week_High_DT|52W High Date|52 W High Date|52 W High Dt.|52W High Dt.", "date", False), _
         Array("52W Low", "CM_52_wk_High_low", "Adjusted_52_Week_Low|52 Week Low|52_Week_Low|52W_Low|52W Low|LO_52_WK", "price", False), _
         Array("52W Low Date", "CM_52_wk_High_low", "52_Week_Low_DT|52 Week Low Date|52 W Low Date|52 W Low Dt.|52W Low Dt.", "date", False), _
-        Array("T0 Tag", "Eligible_T0_Securities", "SERIES|SctySrs|Srs|Series", "text", False), _
-        Array("T0 Effective Date", "Eligible_T0_Securities", "Effective Date", "text", False), _
-        Array("Band", "sec_list", "Band", "number", False), _
-        Array("Remarks", "sec_list", "Remarks", "text", False), _
         Array("Symbol P/E", "PE", "SYMBOL P/E|Symbol P/E", "ratio", False), _
-        Array("Adjusted P/E", "PE", "ADJUSTED P/E|Adjusted P/E", "ratio", False) _
+        Array("Adjusted P/E", "PE", "ADJUSTED P/E|Adjusted P/E", "ratio", False), _
+        Array("T0 Effective Date", "Eligible_T0_Securities", "Effective Date", "text", False), _
+        Array("Paid Up Value", "EQUITY_L|SME_EQUITY_L", "PAID UP VALUE", "price", False), _
+        Array("Category", "mcap", "Category", "text", False) _
     )
 End Function
 
