@@ -64,7 +64,7 @@ def check_login():
     # ---- Mode 2: hardcoded ADMIN_PASSWORD gate ----
     st.markdown(
         "<p style='text-align: center; margin-top: 100px; color: Green; font-size: 18px;'>"
-        "📊 Financial Data File Merger & Formatter</p>",
+        "📊 Data File-8</p>",
         unsafe_allow_html=True,
     )
     st.markdown(
