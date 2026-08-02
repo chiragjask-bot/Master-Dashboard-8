@@ -345,7 +345,7 @@ MAX_BOX_DISPLAY_ROWS = 20000
 
 MASTER_FIELD_MAP = [
     {"label": "Symbol", "sheet": "BhavCopy_NSE_CM", "aliases": ["TckrSymb", "SYMBOL", "Symb"], "format": "text", "isKey": True},
-    {"label": "ISIN", "sheet": "BhavCopy_NSE_CM", "aliases": ["ISIN", "ISIN NUMBER", "ISIN_NUMBER"], "format": "text"},
+    {"label": "ISIN", "sheet": "BhavCopy_NSE_CM", "aliases": ["ISIN", "ISIN NUMBER"], "format": "text"},
     {"label": "Series", "sheet": "BhavCopy_NSE_CM", "aliases": ["SctySrs", "SERIES", "Series", "Srs"], "format": "text"},
     {"label": "Company Name (Capital)", "sheet": "BhavCopy_NSE_CM",
      "aliases": ["FinInstrmNm", "NAME OF COMPANY", "Name Of Company", "Security Name", "SECURITY", "Security",
@@ -398,7 +398,7 @@ MASTER_FIELD_MAP = [
     {"label": "Adjusted P/E", "sheet": "PE", "aliases": ["ADJUSTED P/E", "Adjusted P/E"], "format": "ratio"},
     {"label": "T0 Effective Date", "sheet": "Eligible_T0_Securities", "aliases": ["Effective Date"], "format": "text"},
     {"label": "Paid Up Value", "sheet": ["EQUITY_L", "SME_EQUITY_L"],
-    "aliases": ["PAID UP VALUE", "PAID_UP_VALUE"], "format": "price"},
+     "aliases": ["PAID UP VALUE", "PAID_UP_VALUE"], "format": "price"},
     {"label": "Category", "sheet": "mcap", "aliases": ["Category"], "format": "text"},
 ]
 
@@ -468,6 +468,7 @@ def md_build_master_dashboard(wb, field_map=None):
     field_map: optional field list to use instead of the base MASTER_FIELD_MAP — pass
     get_active_master_field_map() to include any custom columns the user has added."""
     field_map = field_map if field_map is not None else MASTER_FIELD_MAP
+    log = []
     all_aliases = list(MASTER_SYMBOL_ALIASES)
     for f in field_map:
         all_aliases += f["aliases"]
@@ -475,11 +476,12 @@ def md_build_master_dashboard(wb, field_map=None):
 
     fields_by_sheet = {}
     for f in field_map:
-        fields_by_sheet.setdefault(f["sheet"], []).append(f)
+        sheets = f["sheet"] if isinstance(f["sheet"], list) else [f["sheet"]]
+        for s in sheets:
+            fields_by_sheet.setdefault(s, []).append(f)
 
     master_data = {}
     symbol_order = []
-    log = []
 
     for sheet_name, fields in fields_by_sheet.items():
         if sheet_name not in wb.sheetnames:
