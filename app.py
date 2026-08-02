@@ -644,11 +644,45 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             cell.number_format = formats[c - 1]
             cell.border = border
 
+    # ---- Native Excel hide/unhide button (feature request: "hide/unhide button
+    # ⬆️ ... not given in tab Name: Master_Dashboard-8"). openpyxl can't draw a
+    # clickable shape/macro button, but Excel's built-in column *grouping* gives a
+    # real "+ / -" toggle box that lives right inside the sheet — no macro needed.
+    # Every column in MASTER_HIDE_COLUMNS is always put in outline group 1 (whether
+    # or not it starts hidden), so the toggle exists in every Master_Dashboard-8
+    # sheet. The little "1" box in the sheet's top-left corner (above the row
+    # numbers, left of the column letters) collapses/expands EVERY grouped column
+    # at once — i.e. exactly the single on/off hide/unhide button that was asked
+    # for, even though the grouped columns themselves aren't all next to each other.
+    group_norm = {md_normalize_header(h) for h in MASTER_HIDE_COLUMNS}
+    ws.sheet_properties.outlinePr.summaryRight = True
+    ws.sheet_view.showOutlineSymbols = True
+
     for c in range(1, len(labels) + 1):
         col_letter = ws.cell(row=1, column=c).column_letter
         ws.column_dimensions[col_letter].width = 20
-        if md_normalize_header(labels[c - 1]) in hide_set:
+        label_norm = md_normalize_header(labels[c - 1])
+        if label_norm in group_norm:
+            ws.column_dimensions[col_letter].outlineLevel = 1
+        if label_norm in hide_set:
             ws.column_dimensions[col_letter].hidden = True
+
+    # Mark the "collapsed" flag on the column right after each contiguous grouped
+    # run (summaryRight=True puts the +/- box there) so the toggle box shows the
+    # correct starting +/- state for that run.
+    run_start = None
+    for c in range(1, len(labels) + 2):  # +1 sentinel pass to close a run at the end
+        in_group = c <= len(labels) and md_normalize_header(labels[c - 1]) in group_norm
+        if in_group and run_start is None:
+            run_start = c
+        elif not in_group and run_start is not None:
+            run_hidden = all(
+                md_normalize_header(labels[i - 1]) in hide_set for i in range(run_start, c)
+            )
+            boundary_col = min(c, len(labels))
+            boundary_letter = ws.cell(row=1, column=boundary_col).column_letter
+            ws.column_dimensions[boundary_letter].collapsed = run_hidden
+            run_start = None
 
     # Freeze BOTH the header row and the first column (feature request:
     # "freeze 1st column & 1st row in Tab Name: Master_Dashboard-8").
