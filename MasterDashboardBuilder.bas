@@ -48,10 +48,10 @@ Private Function GetFieldMap() As Variant
         Array("Market Cap (Rs.)", "mcap", "Market Cap(Rs.)", "qty", False), _
         Array("Issue Size", "mcap", "Issue Size", "qty", False), _
         Array("Category", "mcap", "Category", "text", False), _
-        Array("Company Name", "EQUITY_L", "NAME OF COMPANY|Name Of Company|Security Name|SECURITY|Security|COMPANY NAME|COMPANY'S NAME|Company Name|Company's Name", "text", False), _
-        Array("Date of Listing", "EQUITY_L", "DATE OF LISTING", "date", False), _
-        Array("Paid Up Value", "EQUITY_L", "PAID UP VALUE", "price", False), _
-        Array("Face Value", "EQUITY_L", "FACE VALUE|Face Value(Rs.)", "price", False), _
+        Array("Company Name", "EQUITY_L|SME_EQUITY_L", "NAME OF COMPANY|Name Of Company|Security Name|SECURITY|Security|COMPANY NAME|COMPANY'S NAME|Company Name|Company's Name", "text", False), _
+        Array("Date of Listing", "EQUITY_L|SME_EQUITY_L", "DATE OF LISTING", "date", False), _
+        Array("Paid Up Value", "EQUITY_L|SME_EQUITY_L", "PAID UP VALUE", "price", False), _
+        Array("Face Value", "EQUITY_L|SME_EQUITY_L", "FACE VALUE|Face Value(Rs.)", "price", False), _
         Array("Delivery Qty", "sec_bhavdata_full", "DELIV QTY|DELIV QUANTITY|Delivery quantity|DELIVERY QNTY|DELIV_QNTY|DELIV QNTY|DELIV_QTY", "qty", False), _
         Array("Delivery %", "sec_bhavdata_full", "DELIV PER|DELIV %|delivery percentage|Delivery Percentage (%)|DELIV_PER", "percent", False), _
         Array("52W High", "CM_52_wk_High_low", "Adjusted_52_Week_High|52_Week_High|52W_High|52 Week High|52W High|HI_52_WK", "price", False), _
