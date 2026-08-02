@@ -350,16 +350,16 @@ MASTER_FIELD_MAP = [
     {"label": "Company Name (Capital)", "sheet": "BhavCopy_NSE_CM",
      "aliases": ["FinInstrmNm", "NAME OF COMPANY", "Name Of Company", "Security Name", "SECURITY", "Security",
                  "COMPANY NAME", "COMPANY'S NAME", "Company Name", "Company's Name"], "format": "text"},
-    {"label": "Company Name", "sheet": ["EQUITY_L", "SME_EQUITY_L"],
+    {"label": "Company Name", "sheet": "EQUITY_L",
      "aliases": ["NAME OF COMPANY", "Name Of Company", "Security Name", "SECURITY", "Security",
                  "COMPANY NAME", "COMPANY'S NAME", "Company Name", "Company's Name"], "format": "text"},
-    {"label": "Date of Listing", "sheet": ["EQUITY_L", "SME_EQUITY_L"], "aliases": ["DATE OF LISTING"], "format": "date"},
+    {"label": "Date of Listing", "sheet": "EQUITY_L", "aliases": ["DATE OF LISTING"], "format": "date"},
     {"label": "Trade Date", "sheet": "BhavCopy_NSE_CM", "aliases": ["TradDt", "Trade Date"], "format": "date"},
     {"label": "Segment", "sheet": "BhavCopy_NSE_CM", "aliases": ["Src"], "format": "text"},
     {"label": "Market Lot", "sheet": "BhavCopy_NSE_CM", "aliases": ["NewBrdLotQty", "MARKET LOT", "Market Lot"], "format": "qty"},
     {"label": "T0 Tag", "sheet": "Eligible_T0_Securities", "aliases": ["SERIES", "SctySrs", "Srs", "Series"], "format": "text"},
     {"label": "Remarks", "sheet": "sec_list", "aliases": ["Remarks"], "format": "text"},
-    {"label": "Face Value", "sheet": ["EQUITY_L", "SME_EQUITY_L"], "aliases": ["FACE VALUE", "Face Value(Rs.)"], "format": "price"},
+    {"label": "Face Value", "sheet": "EQUITY_L", "aliases": ["FACE VALUE", "Face Value(Rs.)"], "format": "price"},
     {"label": "No. of Trades", "sheet": "BhavCopy_NSE_CM", "aliases": ["TtlNbOfTxsExctd", "No. of Trades", "NO OF TRADES", "TRADES", "Trade", "NO_OF_TRADES"], "format": "qty"},
     {"label": "Traded Qty", "sheet": "BhavCopy_NSE_CM",
      "aliases": ["TtlTradgVol", "TTL TRD QNTY", "TRADED QUANTITY", "NET_TRDQTY", "Traded Qty", "NET TRD QTY", "NET TRDQTY", "TTL_TRD_QNTY"], "format": "qty"},
@@ -395,7 +395,7 @@ MASTER_FIELD_MAP = [
     {"label": "Symbol P/E", "sheet": "PE", "aliases": ["SYMBOL P/E", "Symbol P/E"], "format": "ratio"},
     {"label": "Adjusted P/E", "sheet": "PE", "aliases": ["ADJUSTED P/E", "Adjusted P/E"], "format": "ratio"},
     {"label": "T0 Effective Date", "sheet": "Eligible_T0_Securities", "aliases": ["Effective Date"], "format": "text"},
-    {"label": "Paid Up Value", "sheet": ["EQUITY_L", "SME_EQUITY_L"], "aliases": ["PAID UP VALUE"], "format": "price"},
+    {"label": "Paid Up Value", "sheet": "EQUITY_L", "aliases": ["PAID UP VALUE"], "format": "price"},
     {"label": "Category", "sheet": "mcap", "aliases": ["Category"], "format": "text"},
 ]
 
@@ -465,7 +465,6 @@ def md_build_master_dashboard(wb, field_map=None):
     field_map: optional field list to use instead of the base MASTER_FIELD_MAP — pass
     get_active_master_field_map() to include any custom columns the user has added."""
     field_map = field_map if field_map is not None else MASTER_FIELD_MAP
-    log = []
     all_aliases = list(MASTER_SYMBOL_ALIASES)
     for f in field_map:
         all_aliases += f["aliases"]
@@ -473,12 +472,11 @@ def md_build_master_dashboard(wb, field_map=None):
 
     fields_by_sheet = {}
     for f in field_map:
-        sheets = f["sheet"] if isinstance(f["sheet"], list) else [f["sheet"]]
-        for s in sheets:
-            fields_by_sheet.setdefault(s, []).append(f)
+        fields_by_sheet.setdefault(f["sheet"], []).append(f)
 
     master_data = {}
     symbol_order = []
+    log = []
 
     for sheet_name, fields in fields_by_sheet.items():
         if sheet_name not in wb.sheetnames:
