@@ -482,6 +482,32 @@ MASTER_FIELD_MAP = [
     {"label": "Paid Up Value", "sheet": ["EQUITY_L", "SME_EQUITY_L"],
      "aliases": ["PAID UP VALUE", "PAID_UP_VALUE"], "format": "price"},
     {"label": "Category", "sheet": "mcap", "aliases": ["Category"], "format": "text"},
+
+    # ---- Live-formula columns (feature request: "Create New Column Name and
+    # Just paste it below formula in excel"). Unlike the computed columns above,
+    # these are written as REAL Excel/Google Sheets formulas (referencing that
+    # row's Symbol/CMP/DMA cells), not pre-computed Python values — because they
+    # need either live web data (DMAs) or a clickable link (URL columns), neither
+    # of which exists in the source bhavcopy files this app reads.
+    # IMPORTANT (confirmed by the instruction doc itself): the DMA/Bull-Bear/
+    # Difference formulas use GOOGLEFINANCE(), which is a Google Sheets-only
+    # function — it will show #NAME? in Excel and only resolve once the file is
+    # opened in Google Sheets, exactly as the doc says ("not work in excel ...
+    # working properly in google sheet"). See md_write_master_sheet() for the
+    # actual formula text written into each row.
+    {"label": "CAR Rating", "sheet": None, "aliases": [], "format": "text"},
+    {"label": "Difference from 200 DMA", "sheet": None, "aliases": [], "format": "price_signed"},
+    {"label": "Bull/Bear Run Output", "sheet": None, "aliases": [], "format": "text"},
+    {"label": "NSE Chart", "sheet": None, "aliases": [], "format": "text"},
+    {"label": "Trading View", "sheet": None, "aliases": [], "format": "text"},
+    {"label": "History Data", "sheet": None, "aliases": [], "format": "text"},
+    {"label": "Chartlink", "sheet": None, "aliases": [], "format": "text"},
+    {"label": "Chartlink-2", "sheet": None, "aliases": [], "format": "text"},
+    {"label": "Marketsmith", "sheet": None, "aliases": [], "format": "text"},
+    {"label": "Zerodha", "sheet": None, "aliases": [], "format": "text"},
+    {"label": "50 DMA", "sheet": None, "aliases": [], "format": "price"},
+    {"label": "100 DMA", "sheet": None, "aliases": [], "format": "price"},
+    {"label": "200 DMA", "sheet": None, "aliases": [], "format": "price"},
 ]
 
 MASTER_NUMBER_FORMATS = {
@@ -794,10 +820,89 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
     for r, row in enumerate(df.itertuples(index=False), start=2):
         for c, val in enumerate(row, start=1):
             v = None if (val == "" or pd.isna(val)) else val
+            # Fix: date-labelled columns sometimes arrive as plain text (e.g.
+            # "05-AUG-2026") straight from the source bhavcopy file rather than
+            # a real Excel date serial. A text value can carry a date NUMBER
+            # FORMAT for display, but Excel's TODAY()-based conditional
+            # formatting rules below silently never match text — which is what
+            # made the 52W High/Low Date highlighting look "missing". Coercing
+            # to a real date here fixes the display AND the conditional format.
+            if v is not None and formats[c - 1] == MASTER_NUMBER_FORMATS["date"] and not hasattr(v, "year"):
+                parsed = pd.to_datetime(v, errors="coerce", dayfirst=False)
+                if pd.notna(parsed):
+                    v = parsed.to_pydatetime()
             cell = ws.cell(row=r, column=c, value=v)
             cell.font = body_font
             cell.number_format = formats[c - 1]
             cell.border = border
+
+    # ---- Live-formula columns (feature request: "just paste it below formula
+    # in excel", DMA/Bull-Bear/Difference/CAR + all 7 hyperlink columns). Written
+    # as real formula strings per row, referencing that row's own Symbol/CMP/DMA
+    # cells, so they behave like a normal dragged-down Excel/Sheets formula.
+    if "Symbol" in labels and len(df) > 0:
+        sym_col = ws.cell(row=1, column=labels.index("Symbol") + 1).column_letter
+        cmp_col = ws.cell(row=1, column=labels.index("CMP/LTP") + 1).column_letter if "CMP/LTP" in labels else None
+        d50_col = ws.cell(row=1, column=labels.index("50 DMA") + 1).column_letter if "50 DMA" in labels else None
+        d100_col = ws.cell(row=1, column=labels.index("100 DMA") + 1).column_letter if "100 DMA" in labels else None
+        d200_col = ws.cell(row=1, column=labels.index("200 DMA") + 1).column_letter if "200 DMA" in labels else None
+
+        # NSE/TradingView/Chartlink/etc. — (url_prefix, url_suffix, link display text).
+        # Verified live against each site on 2026-08-05 except Marketsmith (that
+        # tool sits behind a login wall with no confirmed public per-symbol URL,
+        # so its query-string form here is a best-effort guess, not confirmed).
+        HYPERLINK_SPECS = {
+            "NSE Chart": ("https://www.nseindia.com/get-quotes/equity?symbol=", "", "NSE Chart"),
+            "Trading View": ("https://www.tradingview.com/symbols/NSE-", "/", "TradingView"),
+            "History Data": ("https://finance.yahoo.com/quote/", ".NS/history", "History"),
+            "Chartlink": ("https://chartink.com/stocks/", ".html", "Chartlink"),
+            "Chartlink-2": ("https://chartink.com/stocks/", ".html", "Chartlink-2"),
+            "Marketsmith": ("https://marketsmithindia.com/mstool/evaluation.jsp?symbol=", "", "Marketsmith"),
+            "Zerodha": ("https://zerodha.com/markets/stocks/NSE/", "/", "Zerodha"),
+        }
+
+        for r in range(2, len(df) + 2):
+            sym_cell = f"{sym_col}{r}"
+
+            for label, (prefix, suffix, display) in HYPERLINK_SPECS.items():
+                if label in labels:
+                    col = labels.index(label) + 1
+                    formula = f'=HYPERLINK("{prefix}"&{sym_cell}&"{suffix}","{display}")'
+                    ws.cell(row=r, column=col, value=formula)
+
+            # DMAs — GOOGLEFINANCE-based, Google Sheets only (per the doc's own
+            # note). Buffered lookback (2x the DMA length in calendar days) so
+            # weekends/holidays don't leave the QUERY short of real trading rows.
+            for label, days in (("50 DMA", 50), ("100 DMA", 100), ("200 DMA", 200)):
+                if label in labels:
+                    col = labels.index(label) + 1
+                    formula = (
+                        f'=IFERROR(AVERAGE(QUERY(GOOGLEFINANCE({sym_cell},"close",'
+                        f'TODAY()-{days * 2},TODAY()),"select Col2 order by Col1 desc limit {days}",1)),"")'
+                    )
+                    ws.cell(row=r, column=col, value=formula)
+
+            if "Bull/Bear Run Output" in labels and cmp_col and d50_col and d100_col and d200_col:
+                col = labels.index("Bull/Bear Run Output") + 1
+                c_, e50, e100, e200 = f"{cmp_col}{r}", f"{d50_col}{r}", f"{d100_col}{r}", f"{d200_col}{r}"
+                formula = (
+                    f'=IF(AND({c_}>{e50},{e50}>{e100},{e100}>{e200}),"Bull",'
+                    f'IF(AND({c_}<{e50},{e50}<{e100},{e100}<{e200}),"Bear","Neutral"))'
+                )
+                ws.cell(row=r, column=col, value=formula)
+
+            if "Difference from 200 DMA" in labels and cmp_col and d200_col:
+                col = labels.index("Difference from 200 DMA") + 1
+                formula = f"={cmp_col}{r}-{d200_col}{r}"
+                ws.cell(row=r, column=col, value=formula)
+
+            # CAR Rating: intentionally left blank. The instruction doc only
+            # shows this pulling from the Symbol cell with no visible
+            # calculation and a Buy/Avoid conditional-format outcome — there's
+            # no disclosed rule for what makes a symbol "Buy" vs "Avoid". I'm
+            # not willing to invent a fake buy/avoid rating formula and label
+            # it as real financial guidance; the column is placed and formatted
+            # correctly so your real CAR formula can be dropped straight in.
 
     # ---- Native Excel hide/unhide button (feature request: "hide/unhide button
     # ⬆️ ... not given in tab Name: Master_Dashboard-8"). openpyxl can't draw a
@@ -908,7 +1013,22 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
                 rng, FormulaRule(formula=[formula], fill=listing_fill, stopIfTrue=True)
             )
 
-    # ---- "Box display" quick-view on the Symbol column (feature request: "Add
+        # ---- Conditional formatting: Price Change (green = price up, red =
+        # price down) — the doc flagged this column as missing a highlight rule.
+        if "Price Change" in labels:
+            col_letter = ws.cell(row=1, column=labels.index("Price Change") + 1).column_letter
+            rng = f"{col_letter}2:{col_letter}{last_row}"
+            first = f"{col_letter}2"
+            up_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+            down_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+            ws.conditional_formatting.add(
+                rng, FormulaRule(formula=[f"{first}>0"], fill=up_fill, stopIfTrue=True)
+            )
+            ws.conditional_formatting.add(
+                rng, FormulaRule(formula=[f"{first}<0"], fill=down_fill, stopIfTrue=True)
+            )
+
+
     # Feature (box display & pop-up box both option) in Symbol column"). This uses
     # Excel's built-in Data Validation input-message tooltip, which appears the
     # moment the Symbol cell is selected — pure Python, no macros required. Excel
