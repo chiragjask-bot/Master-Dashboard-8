@@ -495,6 +495,9 @@ MASTER_FIELD_MAP = [
     # opened in Google Sheets, exactly as the doc says ("not work in excel ...
     # working properly in google sheet"). See md_write_master_sheet() for the
     # actual formula text written into each row.
+    {"label": "50 DMA", "sheet": None, "aliases": [], "format": "price"},
+    {"label": "100 DMA", "sheet": None, "aliases": [], "format": "price"},
+    {"label": "200 DMA", "sheet": None, "aliases": [], "format": "price"},    
     {"label": "CAR Rating", "sheet": None, "aliases": [], "format": "text"},
     {"label": "Difference from 200 DMA", "sheet": None, "aliases": [], "format": "price_signed"},
     {"label": "Bull/Bear Run Output", "sheet": None, "aliases": [], "format": "text"},
@@ -505,9 +508,6 @@ MASTER_FIELD_MAP = [
     {"label": "Chartlink-2", "sheet": None, "aliases": [], "format": "text"},
     {"label": "Marketsmith", "sheet": None, "aliases": [], "format": "text"},
     {"label": "Zerodha", "sheet": None, "aliases": [], "format": "text"},
-    {"label": "50 DMA", "sheet": None, "aliases": [], "format": "price"},
-    {"label": "100 DMA", "sheet": None, "aliases": [], "format": "price"},
-    {"label": "200 DMA", "sheet": None, "aliases": [], "format": "price"},
 ]
 
 MASTER_NUMBER_FORMATS = {
