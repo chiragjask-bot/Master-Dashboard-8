@@ -856,7 +856,7 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             "Trading View": ("https://www.tradingview.com/symbols/NSE-", "/", "TradingView"),
             "History Data": ("https://finance.yahoo.com/quote/", ".NS/history", "History"),
             "Chartlink": ("https://chartink.com/stocks/", ".html", "Chartlink"),
-            "Chartlink-2": ("https://chartink.com/stocks/", ".html", "Chartlink-2"),
+            "Chartlink-2": ("https://chartink.com/fundamentals/", ".html", "Chartlink-2"),
             "Marketsmith": ("https://marketsmithindia.com/mstool/evaluation.jsp?symbol=", "", "Marketsmith"),
             "Zerodha": ("https://zerodha.com/markets/stocks/NSE/", "/", "Zerodha"),
         }
