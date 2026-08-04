@@ -977,20 +977,29 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
         (180, "BDD7EE"),  # blue
         (365, "E1D5E7"),  # purple
     ]
+    
     last_row = ws.max_row
-    if last_row >= 2:
-        for date_label in ("52W High Date", "52W Low Date"):
-            if date_label not in labels:
-                continue
-            col_letter = ws.cell(row=1, column=labels.index(date_label) + 1).column_letter
-            rng = f"{col_letter}2:{col_letter}{last_row}"
-            first = f"{col_letter}2"
-            for days, color in MASTER_52W_DATE_CF_RULES:
-                fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
-                formula = f"AND({first}>=TODAY(),{first}<=TODAY()+{days})"
-                ws.conditional_formatting.add(
-                    rng, FormulaRule(formula=[formula], fill=fill, stopIfTrue=True)
-                )
+if last_row >= 2:
+    for date_label in ("52W High Date", "52W Low Date"):
+        if date_label not in labels:
+            continue
+            
+        col_letter = ws.cell(row=1, column=labels.index(date_label) + 1).column_letter
+        rng = f"{col_letter}2:{col_letter}{last_row}"
+        first = f"{col_letter}2"
+        
+        for days, color in MASTER_52W_DATE_CF_RULES:
+            fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
+            
+            # FIXED FORMULA: 
+            # 1. Added "=" at the beginning for Excel formula syntax
+            # 2. Checked for blanks: {first}<>""
+            # 3. Checked for PAST dates: {first}<=TODAY() AND {first}>=TODAY()-{days}
+            formula = f"=AND({first}<>\"\", {first}<=TODAY(), {first}>=TODAY()-{days})"
+            
+            ws.conditional_formatting.add(
+                rng, FormulaRule(formula=[formula], fill=fill, stopIfTrue=True)
+            )
 
         # ---- Conditional formatting: Date of Listing "anniversary" highlight
         # (feature request: "CONDITIONAL FORMATTING FOR Date of Listing Column,
