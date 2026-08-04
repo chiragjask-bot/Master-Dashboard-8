@@ -1076,7 +1076,6 @@ if last_row >= 2:
     wb.move_sheet(MASTER_SHEET_NAME, offset=-(len(wb.sheetnames) - 2))
     return wb
 
-
 # =====================================================================================
 # 2c. PDF export — "filter Feature in pdf" (features 5 & 6).
 #     IMPORTANT HONEST NOTE: a PDF is a static/print format — it cannot host live
