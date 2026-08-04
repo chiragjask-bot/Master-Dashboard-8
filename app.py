@@ -11,6 +11,7 @@ from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.formatting.rule import FormulaRule
 
 # =====================================================================================
 # 0. LOGIN GATE  (keeps the app private without ever putting a password on GitHub)
@@ -64,7 +65,7 @@ def check_login():
     # ---- Mode 2: hardcoded ADMIN_PASSWORD gate ----
     st.markdown(
         "<p style='text-align: center; margin-top: 100px; color: Green; font-size: 18px;'>"
-        "📊 Data File-8</p>",
+        "📊 Financial Data File Merger & Formatter</p>",
         unsafe_allow_html=True,
     )
     st.markdown(
@@ -130,7 +131,7 @@ st.markdown(hide_github_icon, unsafe_allow_html=True)
 if not check_login():
     st.stop()
 
-st.title("📊 Data File-8")
+st.title("📊 Financial Data File Merger & Formatter")
 st.markdown('<div id="main_tab"></div>', unsafe_allow_html=True)
 
 
@@ -440,6 +441,8 @@ MASTER_FIELD_MAP = [
     {"label": "Face Value", "sheet": ["EQUITY_L", "SME_EQUITY_L"],
      "aliases": ["FACE VALUE", "FACE_VALUE", "Face Value(Rs.)"], "format": "price"},
     {"label": "No. of Trades", "sheet": "BhavCopy_NSE_CM", "aliases": ["TtlNbOfTxsExctd", "No. of Trades", "NO OF TRADES", "TRADES", "Trade", "NO_OF_TRADES"], "format": "qty"},
+    {"label": "Traded % against Issue Size", "sheet": None, "aliases": [], "format": "percent", "computed": True},
+    {"label": "Trades average Deal", "sheet": None, "aliases": [], "format": "price", "computed": True},
     {"label": "Traded Qty", "sheet": "BhavCopy_NSE_CM",
      "aliases": ["TtlTradgVol", "TTL TRD QNTY", "TRADED QUANTITY", "NET_TRDQTY", "Traded Qty", "NET TRD QTY", "NET TRDQTY", "TTL_TRD_QNTY"], "format": "qty"},
     {"label": "Delivery Qty", "sheet": "sec_bhavdata_full",
@@ -455,8 +458,10 @@ MASTER_FIELD_MAP = [
     {"label": "Value (Rs.)", "sheet": "BhavCopy_NSE_CM", "aliases": ["TtlTrfVal", "NET_TRDVAL"], "format": "qty"},
     {"label": "Volume (Lakhs)", "sheet": "StocksTraded", "aliases": ["Volume (Lakhs)"], "format": "lakhs"},
     {"label": "Volume", "sheet": "BhavCopy_NSE_CM", "aliases": ["TtlTradgVol", "NET_TRDQTY"], "format": "qty"},    
+    {"label": "D% against Band", "sheet": None, "aliases": [], "format": "percent", "computed": True},
     {"label": "Band", "sheet": "sec_list", "aliases": ["Band"], "format": "number"},
     {"label": "% Change", "sheet": "StocksTraded", "aliases": ["%chng", "% Change"], "format": "percent"},
+    {"label": "Price Change", "sheet": None, "aliases": [], "format": "price_signed", "computed": True},
     {"label": "Close Price", "sheet": "BhavCopy_NSE_CM", "aliases": ["ClsPric", "CLOSE PRICE", "Close Price", "CLOSE_PRICE"], "format": "price"},
     {"label": "CMP/LTP", "sheet": "BhavCopy_NSE_CM", "aliases": ["LastPric", "LAST PRICE", "Last Price", "LTP", "LAST_PRICE"], "format": "price"},
     {"label": "Prev Close", "sheet": "BhavCopy_NSE_CM", "aliases": ["PrvsClsgPric", "PREV CLOSE", "Previous close", "PREV_CL_PR", "PREV_CLOSE"], "format": "price"},
@@ -481,6 +486,7 @@ MASTER_FIELD_MAP = [
 
 MASTER_NUMBER_FORMATS = {
     "price": "#,##0.00",
+    "price_signed": '+#,##0.00;-#,##0.00;0.00',
     "qty": "#,##0",
     "date": "dd-mmm-yyyy",
     "percent": '0.00"%"',
@@ -490,6 +496,60 @@ MASTER_NUMBER_FORMATS = {
     "number": "0",
     "text": "@",
 }
+
+# 2b-i. Master_Dashboard-8 calculated columns (feature request: "Create New Column
+# Name" with formula-based data, auto-computed from other Master_Dashboard-8
+# columns). Each is computed in Python (not as a live Excel formula) so the value
+# is always correct and doesn't depend on cell references shifting when columns
+# are reordered/hidden. See compute_master_calculated_fields() below.
+#   Price Change                 = Close Price − Prev Close
+#   Trades average Deal          = (Traded Qty / No. of Trades) × Close Price
+#   Traded % against Issue Size  = (Traded Qty × 100) / Issue Size
+#   D% against Band              = (% Change × 100) / Band
+MASTER_COMPUTED_FIELD_LABELS = {
+    "Price Change", "Trades average Deal", "Traded % against Issue Size", "D% against Band",
+}
+
+
+def _md_num(value):
+    """Best-effort float conversion for computed-column inputs; returns None for
+    blank/unparseable values so the calculated column is simply left blank too,
+    instead of raising or writing a wrong 0."""
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        try:
+            return float(str(value).replace(",", "").strip())
+        except (TypeError, ValueError):
+            return None
+
+
+def compute_master_calculated_fields(master_data: dict):
+    """Mutates master_data (symbol -> {label: value}) in place, adding the four
+    MASTER_COMPUTED_FIELD_LABELS wherever their source columns are available for
+    that symbol. Safe to call even if a source column is missing/blank for a
+    given row — that computed cell is just left blank rather than erroring."""
+    for symbol, rec in master_data.items():
+        close = _md_num(rec.get("Close Price"))
+        prev = _md_num(rec.get("Prev Close"))
+        if close is not None and prev is not None:
+            rec["Price Change"] = close - prev
+
+        qty = _md_num(rec.get("Traded Qty"))
+        trades = _md_num(rec.get("No. of Trades"))
+        if qty is not None and trades not in (None, 0) and close is not None:
+            rec["Trades average Deal"] = (qty / trades) * close
+
+        issue_size = _md_num(rec.get("Issue Size"))
+        if qty is not None and issue_size not in (None, 0):
+            rec["Traded % against Issue Size"] = (qty * 100) / issue_size
+
+        pct_change = _md_num(rec.get("% Change"))
+        band = _md_num(rec.get("Band"))
+        if pct_change is not None and band not in (None, 0):
+            rec["D% against Band"] = (pct_change * 100) / band
 
 
 # 2c. Column-hide feature (feature request: "add hide column feature in tab name:
@@ -523,6 +583,11 @@ MASTER_HIDE_COLUMNS = [
     "Paid Up Value",
     "Category",
 ]
+
+# Feature request: "Column hide button size decrease 60%" — scale factor applied
+# to the outline +/- toggle's boundary-column width (1.0 = no change; 0.4 = a
+# 60% decrease from the sheet's normal 20-wide columns).
+MASTER_HIDE_BUTTON_WIDTH_SCALE = 0.4
 
 # 2d. Series-column filter defaults (feature request: "filter data need (required
 #     only: EQ, BE, SM, ST) in Tab Name: Master_Dashboard-8"). Both lists are
@@ -636,6 +701,8 @@ def md_build_master_dashboard(wb, field_map=None):
 
     fields_by_sheet = {}
     for f in field_map:
+        if f.get("computed") or f.get("sheet") is None:
+            continue  # computed columns (see MASTER_COMPUTED_FIELD_LABELS) have no source sheet
         sheets = f["sheet"] if isinstance(f["sheet"], list) else [f["sheet"]]
         for s in sheets:
             fields_by_sheet.setdefault(s, []).append(f)
@@ -679,6 +746,8 @@ def md_build_master_dashboard(wb, field_map=None):
                 cur = master_data[symbol].get(label)
                 if cur is None or cur == "":
                     master_data[symbol][label] = val
+
+    compute_master_calculated_fields(master_data)
 
     symbol_order = sorted(symbol_order)
     labels = [f["label"] for f in field_map]
@@ -768,11 +837,76 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             boundary_col = min(c, len(labels))
             boundary_letter = ws.cell(row=1, column=boundary_col).column_letter
             ws.column_dimensions[boundary_letter].collapsed = run_hidden
+            # Feature request: "hide button size decrease 60%" — Excel draws the
+            # little +/- outline toggle inside this boundary column, so its size
+            # IS that column's width. Shrinking the width to 40% (i.e. a 60%
+            # decrease) makes the button noticeably smaller/more compact. Note:
+            # since this boundary column is also a real, visible data column,
+            # this narrows that column's display width too — there's no way in
+            # Excel to resize just the +/- box without also resizing the column
+            # it sits in.
+            ws.column_dimensions[boundary_letter].width = 20 * MASTER_HIDE_BUTTON_WIDTH_SCALE
             run_start = None
 
     # Freeze BOTH the header row and the first column (feature request:
     # "freeze 1st column & 1st row in Tab Name: Master_Dashboard-8").
     ws.freeze_panes = "B2"
+
+    # ---- AutoFilter enabled by default (feature request: "add filter feature
+    # (by default) in tab name: Master_Dashboard-8"). Every column gets a
+    # dropdown arrow in the header row the moment the file opens — no manual
+    # Data > Filter click needed.
+    if labels:
+        last_col_letter = ws.cell(row=1, column=len(labels)).column_letter
+        ws.auto_filter.ref = f"A1:{last_col_letter}{ws.max_row}"
+
+    # ---- Conditional formatting: 52W High/Low Date "days from today" highlight
+    # (feature request: "CONDITIONAL FORMATTING FOR 52W HIGH/LOW DATES ... Target
+    # Columns: 52W High Date and 52W Low Date"). Narrowest window first with
+    # stop_if_true=True, so e.g. a date 5 days out gets ONLY the 7-day green
+    # highlight, not also the 15/30/180/365-day colors underneath it.
+    MASTER_52W_DATE_CF_RULES = [
+        (7, "C6EFCE"),    # green
+        (15, "FFEB9C"),   # yellow
+        (30, "FFD8A8"),   # orange
+        (180, "BDD7EE"),  # blue
+        (365, "E1D5E7"),  # purple
+    ]
+    last_row = ws.max_row
+    if last_row >= 2:
+        for date_label in ("52W High Date", "52W Low Date"):
+            if date_label not in labels:
+                continue
+            col_letter = ws.cell(row=1, column=labels.index(date_label) + 1).column_letter
+            rng = f"{col_letter}2:{col_letter}{last_row}"
+            first = f"{col_letter}2"
+            for days, color in MASTER_52W_DATE_CF_RULES:
+                fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
+                formula = f"AND({first}>=TODAY(),{first}<=TODAY()+{days})"
+                ws.conditional_formatting.add(
+                    rng, FormulaRule(formula=[formula], fill=fill, stopIfTrue=True)
+                )
+
+        # ---- Conditional formatting: Date of Listing "anniversary" highlight
+        # (feature request: "CONDITIONAL FORMATTING FOR Date of Listing Column,
+        # automatic highlight when same date and month near 1 month"). Highlights
+        # a listing date whenever this year's (or, near year-end, next year's)
+        # month/day anniversary falls within the next 30 days — independent of
+        # the listing's actual year.
+        if "Date of Listing" in labels:
+            col_letter = ws.cell(row=1, column=labels.index("Date of Listing") + 1).column_letter
+            rng = f"{col_letter}2:{col_letter}{last_row}"
+            first = f"{col_letter}2"
+            listing_fill = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")
+            this_year = f"DATE(YEAR(TODAY()),MONTH({first}),DAY({first}))"
+            next_year = f"DATE(YEAR(TODAY())+1,MONTH({first}),DAY({first}))"
+            formula = (
+                f"OR(AND({this_year}>=TODAY(),{this_year}<=TODAY()+30),"
+                f"AND({next_year}>=TODAY(),{next_year}<=TODAY()+30))"
+            )
+            ws.conditional_formatting.add(
+                rng, FormulaRule(formula=[formula], fill=listing_fill, stopIfTrue=True)
+            )
 
     # ---- "Box display" quick-view on the Symbol column (feature request: "Add
     # Feature (box display & pop-up box both option) in Symbol column"). This uses
