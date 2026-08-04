@@ -495,9 +495,6 @@ MASTER_FIELD_MAP = [
     # opened in Google Sheets, exactly as the doc says ("not work in excel ...
     # working properly in google sheet"). See md_write_master_sheet() for the
     # actual formula text written into each row.
-    {"label": "CAR Rating", "sheet": None, "aliases": [], "format": "text"},
-    {"label": "Difference from 200 DMA", "sheet": None, "aliases": [], "format": "price_signed"},
-    {"label": "Bull/Bear Run Output", "sheet": None, "aliases": [], "format": "text"},
     {"label": "NSE Chart", "sheet": None, "aliases": [], "format": "text"},
     {"label": "Trading View", "sheet": None, "aliases": [], "format": "text"},
     {"label": "History Data", "sheet": None, "aliases": [], "format": "text"},
@@ -508,6 +505,9 @@ MASTER_FIELD_MAP = [
     {"label": "50 DMA", "sheet": None, "aliases": [], "format": "price"},
     {"label": "100 DMA", "sheet": None, "aliases": [], "format": "price"},
     {"label": "200 DMA", "sheet": None, "aliases": [], "format": "price"},
+    {"label": "Bull/Bear Run Output", "sheet": None, "aliases": [], "format": "text"},
+    {"label": "Difference from 200 DMA", "sheet": None, "aliases": [], "format": "price_signed"},
+    {"label": "CAR Rating", "sheet": None, "aliases": [], "format": "text"},
 ]
 
 MASTER_NUMBER_FORMATS = {
@@ -896,13 +896,14 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
                 formula = f"={cmp_col}{r}-{d200_col}{r}"
                 ws.cell(row=r, column=col, value=formula)
 
-            # CAR Rating: intentionally left blank. The instruction doc only
-            # shows this pulling from the Symbol cell with no visible
-            # calculation and a Buy/Avoid conditional-format outcome — there's
-            # no disclosed rule for what makes a symbol "Buy" vs "Avoid". I'm
-            # not willing to invent a fake buy/avoid rating formula and label
-            # it as real financial guidance; the column is placed and formatted
-            # correctly so your real CAR formula can be dropped straight in.
+            # CAR Rating — formula supplied directly by the person (pasted
+            # exactly as given, only the Symbol cell reference "A2" is swapped
+            # for this row's real Symbol cell so it still works if the Symbol
+            # column ever isn't literally column A).
+            if "CAR Rating" in labels:
+                col = labels.index("CAR Rating") + 1
+                car_formula = CAR_RATING_FORMULA_TEMPLATE.replace("A2", sym_cell)
+                ws.cell(row=r, column=col, value=car_formula)
 
     # ---- Native Excel hide/unhide button (feature request: "hide/unhide button
     # ⬆️ ... not given in tab Name: Master_Dashboard-8"). openpyxl can't draw a
