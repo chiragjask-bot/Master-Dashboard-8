@@ -495,9 +495,6 @@ MASTER_FIELD_MAP = [
     # opened in Google Sheets, exactly as the doc says ("not work in excel ...
     # working properly in google sheet"). See md_write_master_sheet() for the
     # actual formula text written into each row.
-    {"label": "50 DMA", "sheet": None, "aliases": [], "format": "price"},
-    {"label": "100 DMA", "sheet": None, "aliases": [], "format": "price"},
-    {"label": "200 DMA", "sheet": None, "aliases": [], "format": "price"},    
     {"label": "CAR Rating", "sheet": None, "aliases": [], "format": "text"},
     {"label": "Difference from 200 DMA", "sheet": None, "aliases": [], "format": "price_signed"},
     {"label": "Bull/Bear Run Output", "sheet": None, "aliases": [], "format": "text"},
@@ -508,6 +505,9 @@ MASTER_FIELD_MAP = [
     {"label": "Chartlink-2", "sheet": None, "aliases": [], "format": "text"},
     {"label": "Marketsmith", "sheet": None, "aliases": [], "format": "text"},
     {"label": "Zerodha", "sheet": None, "aliases": [], "format": "text"},
+    {"label": "50 DMA", "sheet": None, "aliases": [], "format": "price"},
+    {"label": "100 DMA", "sheet": None, "aliases": [], "format": "price"},
+    {"label": "200 DMA", "sheet": None, "aliases": [], "format": "price"},
 ]
 
 MASTER_NUMBER_FORMATS = {
@@ -856,7 +856,7 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             "Trading View": ("https://www.tradingview.com/symbols/NSE-", "/", "TradingView"),
             "History Data": ("https://finance.yahoo.com/quote/", ".NS/history", "History"),
             "Chartlink": ("https://chartink.com/stocks/", ".html", "Chartlink"),
-            "Chartlink-2": ("https://chartink.com/fundamentals/", ".html", "Chartlink-2"),
+            "Chartlink-2": ("https://chartink.com/stocks/", ".html", "Chartlink-2"),
             "Marketsmith": ("https://marketsmithindia.com/mstool/evaluation.jsp?symbol=", "", "Marketsmith"),
             "Zerodha": ("https://zerodha.com/markets/stocks/NSE/", "/", "Zerodha"),
         }
@@ -871,14 +871,18 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
                     ws.cell(row=r, column=col, value=formula)
 
             # DMAs — GOOGLEFINANCE-based, Google Sheets only (per the doc's own
-            # note). Buffered lookback (2x the DMA length in calendar days) so
-            # weekends/holidays don't leave the QUERY short of real trading rows.
-            for label, days in (("50 DMA", 50), ("100 DMA", 100), ("200 DMA", 200)):
+            # note). Exact formula requested: SORT(GOOGLEFINANCE("NSE:"&Symbol,
+            # "price", TODAY()-lookback, TODAY()), 1, 0) — sorts newest-date-first,
+            # then QUERY "select Col2 limit N" takes the N most recent closes.
+            # Lookback (in calendar days) is wider than the DMA window itself so
+            # weekends/holidays don't leave the QUERY short of real trading rows:
+            # 50 DMA -> 75d, 100 DMA -> 150d, 200 DMA -> 300d, per the request.
+            for label, days, lookback in (("50 DMA", 50, 75), ("100 DMA", 100, 150), ("200 DMA", 200, 300)):
                 if label in labels:
                     col = labels.index(label) + 1
                     formula = (
-                        f'=IFERROR(AVERAGE(QUERY(GOOGLEFINANCE({sym_cell},"close",'
-                        f'TODAY()-{days * 2},TODAY()),"select Col2 order by Col1 desc limit {days}",1)),"")'
+                        f'=IFERROR(AVERAGE(QUERY(SORT(GOOGLEFINANCE("NSE:"&{sym_cell},"price",'
+                        f'TODAY()-{lookback},TODAY()),1,0),"select Col2 limit {days}")), "")'
                     )
                     ws.cell(row=r, column=col, value=formula)
 
@@ -896,13 +900,35 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
                 formula = f"={cmp_col}{r}-{d200_col}{r}"
                 ws.cell(row=r, column=col, value=formula)
 
-            # CAR Rating: intentionally left blank. The instruction doc only
-            # shows this pulling from the Symbol cell with no visible
-            # calculation and a Buy/Avoid conditional-format outcome — there's
-            # no disclosed rule for what makes a symbol "Buy" vs "Avoid". I'm
-            # not willing to invent a fake buy/avoid rating formula and label
-            # it as real financial guidance; the column is placed and formatted
-            # correctly so your real CAR formula can be dropped straight in.
+            # CAR Rating — exact LET()-based formula supplied in the request.
+            # Pulls the 1-year high date, walks the cumulative-average closes
+            # since that high, and checks whether the last 10 cumulative
+            # averages were rising for 9 straight comparisons (Google Sheets
+            # only: LET/SCAN/CHOOSEROWS/SEQUENCE/LAMBDA are Sheets functions,
+            # not classic Excel). Symbol cell substituted in for every "A2".
+            if "CAR Rating" in labels:
+                col = labels.index("CAR Rating") + 1
+                car_template = (
+                    '=IFERROR(IF(__S__="","ENTER STOCK",'
+                    'LET('
+                    'raw_high, GOOGLEFINANCE("NSE:" & __S__, "high", TODAY()-365, TODAY()),'
+                    'high_date, IFERROR(TO_DATE(QUERY(raw_high, "SELECT Col1 WHERE Col2 IS NOT NULL '
+                    'ORDER BY Col2 DESC LIMIT 1 LABEL Col1 \'\'", 1)), TODAY()-30),'
+                    'raw_data, IFERROR(GOOGLEFINANCE("NSE:" & __S__, "close", high_date, TODAY()), '
+                    'GOOGLEFINANCE("NSE:" & __S__, "close", TODAY()-10, TODAY())),'
+                    'prices, IFERROR(CHOOSEROWS(INDEX(raw_data, 0, 2), SEQUENCE(ROWS(raw_data)-1, 1, 2, 1)), {0}),'
+                    'count_rows, ROWS(prices),'
+                    'cum_avg, SCAN(0, SEQUENCE(count_rows), LAMBDA(a,n, AVERAGE(CHOOSEROWS(prices, SEQUENCE(n))))),'
+                    'last_10, IF(count_rows < 10, {0;0;0;0;0;0;0;0;0;0}, '
+                    'CHOOSEROWS(cum_avg, SEQUENCE(10, 1, count_rows - 9, 1))),'
+                    'check, SUMPRODUCT(--(CHOOSEROWS(last_10, SEQUENCE(9, 1, 2, 1)) > '
+                    'CHOOSEROWS(last_10, SEQUENCE(9, 1, 1, 1)))),'
+                    'IF(count_rows < 10, "\u26aa Short History", IF(check = 9, '
+                    '"\U0001f7e2 Buy/Average Out", "Avoid/Hold \U0001f534"))'
+                    ')), "TICKER NOT FOUND")'
+                )
+                formula = car_template.replace("__S__", sym_cell)
+                ws.cell(row=r, column=col, value=formula)
 
     # ---- Native Excel hide/unhide button (feature request: "hide/unhide button
     # ⬆️ ... not given in tab Name: Master_Dashboard-8"). openpyxl can't draw a
@@ -977,29 +1003,20 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
         (180, "BDD7EE"),  # blue
         (365, "E1D5E7"),  # purple
     ]
-    
     last_row = ws.max_row
-if last_row >= 2:
-    for date_label in ("52W High Date", "52W Low Date"):
-        if date_label not in labels:
-            continue
-            
-        col_letter = ws.cell(row=1, column=labels.index(date_label) + 1).column_letter
-        rng = f"{col_letter}2:{col_letter}{last_row}"
-        first = f"{col_letter}2"
-        
-        for days, color in MASTER_52W_DATE_CF_RULES:
-            fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
-            
-            # FIXED FORMULA: 
-            # 1. Added "=" at the beginning for Excel formula syntax
-            # 2. Checked for blanks: {first}<>""
-            # 3. Checked for PAST dates: {first}<=TODAY() AND {first}>=TODAY()-{days}
-            formula = f"=AND({first}<>\"\", {first}<=TODAY(), {first}>=TODAY()-{days})"
-            
-            ws.conditional_formatting.add(
-                rng, FormulaRule(formula=[formula], fill=fill, stopIfTrue=True)
-            )
+    if last_row >= 2:
+        for date_label in ("52W High Date", "52W Low Date"):
+            if date_label not in labels:
+                continue
+            col_letter = ws.cell(row=1, column=labels.index(date_label) + 1).column_letter
+            rng = f"{col_letter}2:{col_letter}{last_row}"
+            first = f"{col_letter}2"
+            for days, color in MASTER_52W_DATE_CF_RULES:
+                fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
+                formula = f"AND({first}>=TODAY(),{first}<=TODAY()+{days})"
+                ws.conditional_formatting.add(
+                    rng, FormulaRule(formula=[formula], fill=fill, stopIfTrue=True)
+                )
 
         # ---- Conditional formatting: Date of Listing "anniversary" highlight
         # (feature request: "CONDITIONAL FORMATTING FOR Date of Listing Column,
@@ -1026,6 +1043,42 @@ if last_row >= 2:
         # price down) — the doc flagged this column as missing a highlight rule.
         if "Price Change" in labels:
             col_letter = ws.cell(row=1, column=labels.index("Price Change") + 1).column_letter
+            rng = f"{col_letter}2:{col_letter}{last_row}"
+            first = f"{col_letter}2"
+            up_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+            down_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+            ws.conditional_formatting.add(
+                rng, FormulaRule(formula=[f"{first}>0"], fill=up_fill, stopIfTrue=True)
+            )
+            ws.conditional_formatting.add(
+                rng, FormulaRule(formula=[f"{first}<0"], fill=down_fill, stopIfTrue=True)
+            )
+
+        # ---- Conditional formatting: Bull/Bear Run Output — green for "Bull",
+        # red for "Bear", grey for "Neutral" (the doc flagged this column as
+        # missing a highlight rule).
+        if "Bull/Bear Run Output" in labels:
+            col_letter = ws.cell(row=1, column=labels.index("Bull/Bear Run Output") + 1).column_letter
+            rng = f"{col_letter}2:{col_letter}{last_row}"
+            first = f"{col_letter}2"
+            bull_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+            bear_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+            neutral_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+            ws.conditional_formatting.add(
+                rng, FormulaRule(formula=[f'{first}="Bull"'], fill=bull_fill, stopIfTrue=True)
+            )
+            ws.conditional_formatting.add(
+                rng, FormulaRule(formula=[f'{first}="Bear"'], fill=bear_fill, stopIfTrue=True)
+            )
+            ws.conditional_formatting.add(
+                rng, FormulaRule(formula=[f'{first}="Neutral"'], fill=neutral_fill, stopIfTrue=True)
+            )
+
+        # ---- Conditional formatting: Difference from 200 DMA — green when the
+        # CMP is above the 200 DMA (positive), red when it's below (negative)
+        # (the doc flagged this column as missing a highlight rule).
+        if "Difference from 200 DMA" in labels:
+            col_letter = ws.cell(row=1, column=labels.index("Difference from 200 DMA") + 1).column_letter
             rng = f"{col_letter}2:{col_letter}{last_row}"
             first = f"{col_letter}2"
             up_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
@@ -1075,6 +1128,7 @@ if last_row >= 2:
     # Move it to the front so it's the first thing a reviewer sees, right after Main Tab.
     wb.move_sheet(MASTER_SHEET_NAME, offset=-(len(wb.sheetnames) - 2))
     return wb
+
 
 # =====================================================================================
 # 2c. PDF export — "filter Feature in pdf" (features 5 & 6).
