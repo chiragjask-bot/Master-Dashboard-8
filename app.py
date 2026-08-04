@@ -497,6 +497,9 @@ MASTER_FIELD_MAP = [
     # actual formula text written into each row.
     {"label": "CAR Rating", "sheet": None, "aliases": [], "format": "text"},
     {"label": "Difference from 200 DMA", "sheet": None, "aliases": [], "format": "price_signed"},
+    {"label": "50 DMA", "sheet": None, "aliases": [], "format": "price"},
+    {"label": "100 DMA", "sheet": None, "aliases": [], "format": "price"},
+    {"label": "200 DMA", "sheet": None, "aliases": [], "format": "price"},
     {"label": "Bull/Bear Run Output", "sheet": None, "aliases": [], "format": "text"},
     {"label": "NSE Chart", "sheet": None, "aliases": [], "format": "text"},
     {"label": "Trading View", "sheet": None, "aliases": [], "format": "text"},
@@ -505,9 +508,6 @@ MASTER_FIELD_MAP = [
     {"label": "Chartlink-2", "sheet": None, "aliases": [], "format": "text"},
     {"label": "Marketsmith", "sheet": None, "aliases": [], "format": "text"},
     {"label": "Zerodha", "sheet": None, "aliases": [], "format": "text"},
-    {"label": "50 DMA", "sheet": None, "aliases": [], "format": "price"},
-    {"label": "100 DMA", "sheet": None, "aliases": [], "format": "price"},
-    {"label": "200 DMA", "sheet": None, "aliases": [], "format": "price"},
 ]
 
 MASTER_NUMBER_FORMATS = {
@@ -897,7 +897,9 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
 
             if "Difference from 200 DMA" in labels and cmp_col and d200_col:
                 col = labels.index("Difference from 200 DMA") + 1
-                formula = f"={cmp_col}{r}-{d200_col}{r}"
+                # % difference of CMP from its 200 DMA, per the request:
+                # =((CMP-200 DMA)*100)/CMP  ->  e.g. =((AF2-AX2)*100)/AF2
+                formula = f"=(({cmp_col}{r}-{d200_col}{r})*100)/{cmp_col}{r}"
                 ws.cell(row=r, column=col, value=formula)
 
             # CAR Rating — exact LET()-based formula supplied in the request.
