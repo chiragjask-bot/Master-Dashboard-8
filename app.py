@@ -11,6 +11,7 @@ from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.comments import Comment
 from openpyxl.formatting.rule import FormulaRule
 
 # =====================================================================================
@@ -993,10 +994,14 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
         last_col_letter = ws.cell(row=1, column=len(labels)).column_letter
         ws.auto_filter.ref = f"A1:{last_col_letter}{ws.max_row}"
 
-    # ---- Conditional formatting: 52W High/Low Date "days from today" highlight
+    # ---- Conditional formatting: 52W High/Low Date "days ago" highlight
     # (feature request: "CONDITIONAL FORMATTING FOR 52W HIGH/LOW DATES ... Target
-    # Columns: 52W High Date and 52W Low Date"). Narrowest window first with
-    # stop_if_true=True, so e.g. a date 5 days out gets ONLY the 7-day green
+    # Columns: 52W High Date and 52W Low Date"). BUGFIX: a 52-week high/low date
+    # is always in the PAST (it already happened), so the rule has to look
+    # backward from today (TODAY()-N .. TODAY()) — the previous version checked
+    # TODAY() .. TODAY()+N (a future window), which a past date can never satisfy,
+    # so the highlight silently never fired. Narrowest window first with
+    # stop_if_true=True, so e.g. a date 5 days ago gets ONLY the 7-day green
     # highlight, not also the 15/30/180/365-day colors underneath it.
     MASTER_52W_DATE_CF_RULES = [
         (7, "C6EFCE"),    # green
@@ -1015,7 +1020,7 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             first = f"{col_letter}2"
             for days, color in MASTER_52W_DATE_CF_RULES:
                 fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
-                formula = f"AND({first}>=TODAY(),{first}<=TODAY()+{days})"
+                formula = f'AND({first}<>"",{first}<=TODAY(),{first}>=TODAY()-{days})'
                 ws.conditional_formatting.add(
                     rng, FormulaRule(formula=[formula], fill=fill, stopIfTrue=True)
                 )
@@ -1092,12 +1097,89 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
                 rng, FormulaRule(formula=[f"{first}<0"], fill=down_fill, stopIfTrue=True)
             )
 
+        # ---- Conditional formatting: % Change — green above +3%, red below
+        # -3% (feature request: "Column Name: % Change, above 3% and Below 3%
+        # give conditional formatting").
+        if "% Change" in labels:
+            col_letter = ws.cell(row=1, column=labels.index("% Change") + 1).column_letter
+            rng = f"{col_letter}2:{col_letter}{last_row}"
+            first = f"{col_letter}2"
+            up_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+            down_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+            ws.conditional_formatting.add(
+                rng, FormulaRule(formula=[f"{first}>3"], fill=up_fill, stopIfTrue=True)
+            )
+            ws.conditional_formatting.add(
+                rng, FormulaRule(formula=[f"{first}<-3"], fill=down_fill, stopIfTrue=True)
+            )
 
-    # Feature (box display & pop-up box both option) in Symbol column"). This uses
-    # Excel's built-in Data Validation input-message tooltip, which appears the
-    # moment the Symbol cell is selected — pure Python, no macros required. Excel
-    # caps an input message at ~255 characters, so only a condensed set of the
-    # most commonly checked fields is shown here. For the FULL record (every
+        # ---- Conditional formatting: CMP/LTP, Close Price, Prev Close — near
+        # the 52-week HIGH (negative for you) vs near the 52-week LOW (positive
+        # for you), with a stronger colour when that high/low happened in the
+        # last 7 days and a lighter colour when it happened within the last 30
+        # days ("this month"). Feature request formulas, adapted to this sheet's
+        # real 52W High/Low columns instead of the M2/O2 example cells:
+        #   near 52W High: AND(price<>"",52WHigh<>"",price>=52WHigh*0.92)
+        #   near 52W Low:  AND(price<>"",52WLow<>"",price<=52WLow*1.08)
+        # Narrowest (7-day) rule goes first with stop_if_true=True so a hit in
+        # the last 7 days shows only the strong colour, not both.
+        high52_col = ws.cell(row=1, column=labels.index("52W High") + 1).column_letter if "52W High" in labels else None
+        highdate52_col = ws.cell(row=1, column=labels.index("52W High Date") + 1).column_letter if "52W High Date" in labels else None
+        low52_col = ws.cell(row=1, column=labels.index("52W Low") + 1).column_letter if "52W Low" in labels else None
+        lowdate52_col = ws.cell(row=1, column=labels.index("52W Low Date") + 1).column_letter if "52W Low Date" in labels else None
+        if high52_col and highdate52_col and low52_col and lowdate52_col:
+            strong_high_fill = PatternFill(start_color="FF6666", end_color="FF6666", fill_type="solid")
+            light_high_fill = PatternFill(start_color="FFD9D9", end_color="FFD9D9", fill_type="solid")
+            strong_low_fill = PatternFill(start_color="63BE7B", end_color="63BE7B", fill_type="solid")
+            light_low_fill = PatternFill(start_color="D6F2DE", end_color="D6F2DE", fill_type="solid")
+            for price_label in ("CMP/LTP", "Close Price", "Prev Close"):
+                if price_label not in labels:
+                    continue
+                col_letter = ws.cell(row=1, column=labels.index(price_label) + 1).column_letter
+                rng = f"{col_letter}2:{col_letter}{last_row}"
+                p = f"{col_letter}2"
+                h, hd = f"{high52_col}2", f"{highdate52_col}2"
+                l, ld = f"{low52_col}2", f"{lowdate52_col}2"
+                near_high = f'{p}<>"",{h}<>"",{p}>={h}*0.92'
+                near_low = f'{p}<>"",{l}<>"",{p}<={l}*1.08'
+                ws.conditional_formatting.add(
+                    rng, FormulaRule(
+                        formula=[f'AND({near_high},{hd}<>"",{hd}<=TODAY(),{hd}>=TODAY()-7)'],
+                        fill=strong_high_fill, stopIfTrue=True,
+                    )
+                )
+                ws.conditional_formatting.add(
+                    rng, FormulaRule(
+                        formula=[f'AND({near_high},{hd}<>"",{hd}<=TODAY(),{hd}>=TODAY()-30)'],
+                        fill=light_high_fill, stopIfTrue=True,
+                    )
+                )
+                ws.conditional_formatting.add(
+                    rng, FormulaRule(
+                        formula=[f'AND({near_low},{ld}<>"",{ld}<=TODAY(),{ld}>=TODAY()-7)'],
+                        fill=strong_low_fill, stopIfTrue=True,
+                    )
+                )
+                ws.conditional_formatting.add(
+                    rng, FormulaRule(
+                        formula=[f'AND({near_low},{ld}<>"",{ld}<=TODAY(),{ld}>=TODAY()-30)'],
+                        fill=light_low_fill, stopIfTrue=True,
+                    )
+                )
+
+
+    # Feature (box display & pop-up box both option) in Symbol column"). Two
+    # mechanisms are written to the SAME cell so this works in both apps:
+    #   1) Excel Data Validation input-message — auto-shows the instant the
+    #      cell is selected/clicked. This is an Excel-only UI feature; Google
+    #      Sheets silently drops it on import, which is why "Quick View" looked
+    #      like it vanished there.
+    #   2) A real cell Comment/Note — this DOES survive an .xlsx -> Google
+    #      Sheets import (shows as the small black-triangle note in the
+    #      cell's corner, same text, hover to view) and also works as a
+    #      hover tooltip in Excel, so it's the cross-platform fallback.
+    # Excel caps an input message at ~255 characters, so only a condensed set of
+    # the most commonly checked fields is shown here. For the FULL record (every
     # single column, dynamically, regardless of column order) see the optional
     # "MasterDashboardPopup" VBA macro described in EXCEL_MACRO_SETUP.md, which
     # shows a full pop-up (MsgBox) card instead — the "both option" the request asked for.
@@ -1126,6 +1208,14 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             dv.prompt = prompt_text
             dv.add(ws.cell(row=r, column=symbol_col_idx).coordinate)
             ws.add_data_validation(dv)
+
+            # Cross-platform fallback: same text as a real cell Comment/Note,
+            # so it still shows up (as a Google Sheets note) after import.
+            symbol_cell = ws.cell(row=r, column=symbol_col_idx)
+            comment = Comment(f"Quick View\n{prompt_text}", "Master Dashboard")
+            comment.width = 260
+            comment.height = 130
+            symbol_cell.comment = comment
 
     # Move it to the front so it's the first thing a reviewer sees, right after Main Tab.
     wb.move_sheet(MASTER_SHEET_NAME, offset=-(len(wb.sheetnames) - 2))
