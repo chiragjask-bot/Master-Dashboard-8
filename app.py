@@ -424,6 +424,11 @@ MAX_BOX_DISPLAY_ROWS = 20000
 
 MASTER_FIELD_MAP = [
     {"label": "Symbol", "sheet": "BhavCopy_NSE_CM", "aliases": ["TckrSymb", "SYMBOL", "Symb"], "format": "text", "isKey": True},
+    # Pinned right next to Symbol (not at the far end with the other hyperlink
+    # columns) — feature request: a clickable link "dot" visible without
+    # scrolling, right beside the symbol name. Freeze panes below is widened
+    # to column C to keep both Symbol and this dot on screen while scrolling.
+    {"label": "NSE Chart", "sheet": None, "aliases": [], "format": "text"},
     {"label": "ISIN", "sheet": "BhavCopy_NSE_CM", "aliases": ["ISIN", "ISIN NUMBER"], "format": "text"},
     {"label": "Series", "sheet": "BhavCopy_NSE_CM", "aliases": ["SctySrs", "SERIES", "Series", "Srs"], "format": "text"},
     {"label": "Company Name (Capital)", "sheet": "BhavCopy_NSE_CM",
@@ -502,7 +507,6 @@ MASTER_FIELD_MAP = [
     {"label": "100 DMA", "sheet": None, "aliases": [], "format": "price"},
     {"label": "200 DMA", "sheet": None, "aliases": [], "format": "price"},
     {"label": "Bull/Bear Run Output", "sheet": None, "aliases": [], "format": "text"},
-    {"label": "NSE Chart", "sheet": None, "aliases": [], "format": "text"},
     {"label": "Trading View", "sheet": None, "aliases": [], "format": "text"},
     {"label": "History Data", "sheet": None, "aliases": [], "format": "text"},
     {"label": "Chartlink", "sheet": None, "aliases": [], "format": "text"},
@@ -852,14 +856,21 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
         # Verified live against each site on 2026-08-05 except Marketsmith (that
         # tool sits behind a login wall with no confirmed public per-symbol URL,
         # so its query-string form here is a best-effort guess, not confirmed).
+        # Display text is a small clickable "dot" symbol instead of a full word
+        # (feature request: "clickable url hyperlink @ like small dot in quick
+        # view ... =HYPERLINK(url,"🟢")") — one colour per link so the columns
+        # stay visually distinct at a glance; the column header already says
+        # which service it is, so the cell itself only needs to be a compact,
+        # clickable dot. Clicking the dot opens the URL exactly like before —
+        # only the display text changed, not the link behaviour.
         HYPERLINK_SPECS = {
-            "NSE Chart": ("https://www.nseindia.com/get-quotes/equity?symbol=", "", "NSE Chart"),
-            "Trading View": ("https://www.tradingview.com/symbols/NSE-", "/", "TradingView"),
-            "History Data": ("https://finance.yahoo.com/quote/", ".NS/history", "History"),
-            "Chartlink": ("https://chartink.com/stocks/", ".html", "Chartlink"),
-            "Chartlink-2": ("https://chartink.com/stocks/", ".html", "Chartlink-2"),
-            "Marketsmith": ("https://marketsmithindia.com/mstool/evaluation.jsp?symbol=", "", "Marketsmith"),
-            "Zerodha": ("https://zerodha.com/markets/stocks/NSE/", "/", "Zerodha"),
+            "NSE Chart": ("https://www.nseindia.com/get-quotes/equity?symbol=", "", "🟢"),
+            "Trading View": ("https://www.tradingview.com/symbols/NSE-", "/", "🔵"),
+            "History Data": ("https://finance.yahoo.com/quote/", ".NS/history", "🟡"),
+            "Chartlink": ("https://chartink.com/stocks/", ".html", "🟣"),
+            "Chartlink-2": ("https://chartink.com/stocks/", ".html", "🟠"),
+            "Marketsmith": ("https://marketsmithindia.com/mstool/evaluation.jsp?symbol=", "", "⚪"),
+            "Zerodha": ("https://zerodha.com/markets/stocks/NSE/", "/", "🔴"),
         }
 
         for r in range(2, len(df) + 2):
@@ -982,9 +993,11 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             ws.column_dimensions[boundary_letter].width = 20 * MASTER_HIDE_BUTTON_WIDTH_SCALE
             run_start = None
 
-    # Freeze BOTH the header row and the first column (feature request:
-    # "freeze 1st column & 1st row in Tab Name: Master_Dashboard-8").
-    ws.freeze_panes = "B2"
+    # Freeze the header row + Symbol + the pinned NSE Chart dot column (feature
+    # request: "freeze 1st column & 1st row"; widened by one column now that
+    # the clickable NSE Chart dot sits right next to Symbol, so the dot stays
+    # visible on screen too, not just the Symbol name).
+    ws.freeze_panes = "C2" if "NSE Chart" in labels else "B2"
 
     # ---- AutoFilter enabled by default (feature request: "add filter feature
     # (by default) in tab name: Master_Dashboard-8"). Every column gets a
