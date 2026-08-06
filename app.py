@@ -1998,4 +1998,440 @@ if all_candidate_files or custom_tab_files:
                     )
                 else:
                     st.session_state.setdefault("custom_master_fields", [])
-                    st.session_state["custom_master
+                    st.session_state["custom_master_fields"].append({
+                        "label": label_clean,
+                        "sheet": master_col_tab,
+                        "aliases": [col_name_clean],
+                        "format": "text",
+                    })
+                    # Stale sequencer order would otherwise hide the new column until
+                    # it's dropped and re-synced, so clear it and let it re-append.
+                    st.session_state.pop("master_col_order", None)
+                    st.success(f'Added "{label_clean}" (from {master_col_tab} → {col_name_clean}).')
+                    st.rerun()
+
+        custom_fields = st.session_state.get("custom_master_fields", [])
+        if custom_fields:
+            st.caption("Custom columns added so far:")
+            for i, f in enumerate(custom_fields):
+                c1, c2 = st.columns([5, 1])
+                c1.write(f'• **{f["label"]}** ← {f["sheet"]} → {f["aliases"][0]}')
+                if c2.button("🗑 Remove", key=f"custom_field_remove_{i}"):
+                    st.session_state["custom_master_fields"].pop(i)
+                    st.session_state.pop("master_col_order", None)
+                    st.rerun()
+
+        st.markdown("---")
+        st.subheader("🔀 Master_Dashboard-8 — column order & inclusion")
+        st.caption(
+            "Master_Dashboard-8's columns come from a fixed field list (plus any custom "
+            "columns you added above), not from your uploads, so you can sequence them "
+            "any time. Move columns left/right to change their order in the final sheet, "
+            "or delete ones you don't want. 'Symbol' is the join key and can't be deleted."
+        )
+        active_field_map = get_active_master_field_map()
+        master_col_order = render_column_sequencer(
+            "master_col_order",
+            [f["label"] for f in active_field_map],
+            allow_delete=True,
+            protected=["Symbol"],
+            label="Master_Dashboard-8 columns",
+        )
+
+        st.markdown("---")
+        st.subheader("🙈 Master_Dashboard-8 — hide/unhide columns")
+        st.caption(
+            "One on/off switch hides this fixed list of columns (as Excel column-hide, "
+            "not deletion — the data stays in the sheet, just collapsed) in "
+            "Master_Dashboard-8: " + ", ".join(MASTER_HIDE_COLUMNS)
+        )
+        st.checkbox(
+            "Hide these columns in Master_Dashboard-8",
+            key="master_hide_cols_toggle",
+        )
+
+        st.markdown("---")
+        st.subheader("🔀 Master_Dashboard-8 — Series filter")
+        st.caption(
+            "Row filters applied only to Master_Dashboard-8. Leave a box empty to skip "
+            "that filter."
+        )
+        series_filter_col, name_filter_col = st.columns(2)
+        with series_filter_col:
+            st.text_input(
+                "✅ Keep only these Series values (comma-separated)",
+                value=st.session_state.get("series_keep_input", DEFAULT_SERIES_KEEP),
+                key="series_keep_input",
+                help="e.g. EQ, BE, SM, ST — any Series value not in this list is dropped "
+                     "from Master_Dashboard-8.",
+            )
+        with name_filter_col:
+            st.text_input(
+                "🗑 Delete rows where Company Name contains (comma-separated)",
+                value=st.session_state.get("exclude_name_input", DEFAULT_NAME_EXCLUDE),
+                key="exclude_name_input",
+                help="e.g. ETF, TRUST, REIT — rows whose Company Name / Company Name "
+                     "(Capital) contains any of these (case-insensitive) are dropped.",
+            )
+
+        st.markdown("---")
+
+        if st.button("🚀 Execute Structural Consolidation", type="primary"):
+            output_stream = io.BytesIO()
+
+            NAV_ROW = 1  # excel row 1 on every data sheet is reserved for the "⬆️ Main Tab" jump-back link
+            LINK_FONT = Font(color="0563C1", underline="single", bold=True)
+
+            # Computed early (before the Main Tab hub sheet is built below) so the
+            # same field map drives both the Main-Tab highlight and the
+            # Master_Dashboard-8 build later in this same block.
+            exec_field_map = get_active_master_field_map()
+            master_alias_lookup = build_master_alias_lookup(exec_field_map)
+            MASTER_HIGHLIGHT_MAIN_TAB_COLOR = "FFF2CC"  # light yellow
+            main_tab_highlight_fill = PatternFill(
+                start_color=MASTER_HIGHLIGHT_MAIN_TAB_COLOR,
+                end_color=MASTER_HIGHLIGHT_MAIN_TAB_COLOR,
+                fill_type="solid",
+            )
+
+            with pd.ExcelWriter(output_stream, engine='openpyxl') as writer:
+                exportable_tabs = [t for t in ALL_TABS if t in processed_dataframes]
+
+                # --- Build the "Main Tab" hub sheet first, so it opens as sheet #1 ---
+                main_ws = writer.book.create_sheet(title="Main Tab")
+                main_ws["A1"] = "📊 Master Financial Data — Main Tab"
+                main_ws["A1"].font = Font(bold=True, size=14)
+                main_ws["A3"] = "Click a tab name below to jump straight to that sheet."
+                main_ws["A3"].font = Font(italic=True)
+                main_ws["A4"] = "🟡 Highlighted columns below feed into Master_Dashboard-8 (see MASTER_FIELD_MAP)."
+                main_ws["A4"].font = Font(italic=True)
+
+                header_row_num = 5
+                fixed_headers = ["Tab Name", "Rows", "Columns"]
+                max_col_count = max(
+                    (len(processed_dataframes[t].columns) for t in exportable_tabs), default=0
+                )
+                column_headers = [f"Column {i}" for i in range(1, max_col_count + 1)]
+                all_headers = fixed_headers + column_headers
+
+                for c_idx, label in enumerate(all_headers, start=1):
+                    main_ws.cell(row=header_row_num, column=c_idx, value=label).font = Font(bold=True)
+
+                for i, tab in enumerate(exportable_tabs, start=1):
+                    row = header_row_num + i
+                    tab_df = processed_dataframes[tab]
+
+                    link_cell = main_ws.cell(row=row, column=1, value=f"➡️ {tab}")
+                    link_cell.hyperlink = f"#'{tab}'!A1"
+                    link_cell.font = LINK_FONT
+                    main_ws.cell(row=row, column=2, value=len(tab_df))
+                    main_ws.cell(row=row, column=3, value=len(tab_df.columns))
+
+                    tab_aliases = master_alias_lookup.get(tab, set())
+                    for c_idx, col_name in enumerate(tab_df.columns, start=4):
+                        col_cell = main_ws.cell(row=row, column=c_idx, value=str(col_name))
+                        if md_normalize_header(col_name) in tab_aliases:
+                            col_cell.fill = main_tab_highlight_fill
+                            col_cell.font = Font(bold=True)
+
+                main_ws.column_dimensions['A'].width = 45
+                main_ws.column_dimensions['B'].width = 12
+                main_ws.column_dimensions['C'].width = 12
+                for c_idx in range(4, 4 + max_col_count):
+                    main_ws.column_dimensions[main_ws.cell(row=header_row_num, column=c_idx).column_letter].width = 22
+
+                for tab in ALL_TABS:
+                    if tab in processed_dataframes:
+                        df_target = processed_dataframes[tab]
+
+                        preamble_offset = len(special_headers.get(tab, []))
+                        start_row = NAV_ROW + preamble_offset  # 0-indexed pandas startrow
+
+                        if tab in special_headers:
+                            workbook = writer.book
+                            worksheet = workbook.create_sheet(title=tab)
+                            writer.sheets[tab] = worksheet
+                            for i, line in enumerate(special_headers[tab], start=1):
+                                worksheet.cell(row=NAV_ROW + i, column=1, value=line)
+
+                        df_target.to_excel(writer, sheet_name=tab, startrow=start_row, index=False)
+
+                        worksheet = writer.sheets[tab]
+
+                        # Row 1: jump-back link to the Main Tab hub sheet.
+                        # Most tabs get it at A1; a couple were reported as needing
+                        # it at B1 instead (see NAV_LINK_CELL_OVERRIDES).
+                        nav_link_cell_ref = get_nav_link_cell(tab)
+                        nav_row_num, nav_col_idx = parse_start_cell(nav_link_cell_ref)
+                        if nav_row_num is None:
+                            nav_row_num, nav_col_idx = NAV_ROW, 0
+                        nav_cell = worksheet.cell(row=nav_row_num, column=nav_col_idx + 1, value="⬆️ Main Tab")
+                        nav_cell.hyperlink = "#'Main Tab'!A1"
+                        nav_cell.font = LINK_FONT
+
+                        header_row = start_row + 1
+                        data_start_row = header_row + 1
+
+                        # Loop cells individually to fix numbers and scrub formatting flaws
+                        for col_idx, col_name in enumerate(df_target.columns, start=1):
+                            fmt_type = auto_detect_format(col_name, df_target[col_name])
+                            excel_format = NUMBER_FORMATS.get(fmt_type, '@')
+
+                            for row_idx in range(data_start_row, worksheet.max_row + 1):
+                                cell = worksheet.cell(row=row_idx, column=col_idx)
+                                val = cell.value
+
+                                if val is None:
+                                    continue
+
+                                val_clean = str(val).strip() if isinstance(val, str) else val
+
+                                if str(col_name).strip().lower() == 'band':
+                                    try:
+                                        cell.value = int(float(val_clean))
+                                        cell.number_format = '0'
+                                    except (ValueError, TypeError):
+                                        cell.value = val_clean
+                                        cell.number_format = '@'
+
+                                elif fmt_type == 'date':
+                                    if val_clean in ['-', '', 'NA']:
+                                        cell.value = val_clean
+                                        cell.number_format = '@'
+                                    else:
+                                        try:
+                                            date_obj = pd.to_datetime(val_clean, dayfirst=True).to_pydatetime()
+                                            cell.value = date_obj
+                                            cell.number_format = excel_format
+                                        except Exception:
+                                            cell.value = val_clean
+                                            cell.number_format = '@'
+
+                                elif fmt_type in ['price', 'qty', 'percent', 'ratio', 'crores', 'lakhs', 'number']:
+                                    try:
+                                        numeric_clean = (
+                                            str(val_clean).replace(',', '')
+                                            if isinstance(val_clean, str) else val_clean
+                                        )
+                                        cell.value = float(numeric_clean)
+                                        cell.number_format = excel_format
+                                    except (ValueError, TypeError):
+                                        cell.value = val_clean
+                                        cell.number_format = '@'
+
+                                else:
+                                    try:
+                                        numeric_clean = (
+                                            str(val_clean).replace(',', '')
+                                            if isinstance(val_clean, str) else val_clean
+                                        )
+                                        cell.value = float(numeric_clean)
+                                        cell.number_format = NUMBER_FORMATS['number']
+                                    except (ValueError, TypeError):
+                                        cell.value = val_clean
+                                        cell.number_format = excel_format
+
+                        # Auto-adjust column widths
+                        for col_idx, _ in enumerate(df_target.columns, start=1):
+                            column_letter = worksheet.cell(row=header_row, column=col_idx).column_letter
+                            max_length = 0
+                            for row_cell in worksheet[column_letter]:
+                                try:
+                                    if len(str(row_cell.value)) > max_length:
+                                        max_length = len(str(row_cell.value))
+                                except Exception:
+                                    pass
+                            worksheet.column_dimensions[column_letter].width = min(max_length + 2, 50)
+
+                        # Freeze the header row(s) AND the first column (feature request:
+                        # "freeze 1st column in all tab"). Freezing right after the header
+                        # row is correct for every tab, since the "⬆️ Main Tab" nav row (1)
+                        # + header row (2) precede the data on every sheet.
+                        last_frozen_row = CUSTOM_FREEZE_ROWS.get(tab, header_row)
+                        worksheet.freeze_panes = worksheet.cell(row=last_frozen_row + 1, column=2).coordinate
+                        last_col_letter = worksheet.cell(row=header_row, column=len(df_target.columns)).column_letter
+                        worksheet.auto_filter.ref = f"A{header_row}:{last_col_letter}{worksheet.max_row}"
+
+                        # Default cell this tab opens/scrolls to in Excel (A1 unless overridden above).
+                        view_cell = get_default_view_cell(tab)
+                        worksheet.sheet_view.topLeftCell = view_cell
+                        if worksheet.sheet_view.selection:
+                            worksheet.sheet_view.selection[0].activeCell = view_cell
+                            worksheet.sheet_view.selection[0].sqref = view_cell
+
+                # -----------------------------------------------------------------
+                # Auto-build Master_Dashboard-8 by default — no extra click needed.
+                # Reads straight off writer.book, which already holds every tab
+                # just written above, and appends the joined sheet to it.
+                # -----------------------------------------------------------------
+                master_df, master_log = md_build_master_dashboard(writer.book, field_map=exec_field_map)
+
+                # Row filters: keep-list on Series, exclude-list on Company Name.
+                rows_before_filter = len(master_df)
+                master_df = filter_master_dashboard_rows(
+                    master_df,
+                    keep_series_csv=st.session_state.get("series_keep_input", ""),
+                    exclude_name_csv=st.session_state.get("exclude_name_input", ""),
+                )
+                rows_after_filter = len(master_df)
+
+                active_master_order = st.session_state.get(
+                    "master_col_order", [f["label"] for f in exec_field_map]
+                )
+                master_hide_columns = (
+                    MASTER_HIDE_COLUMNS if st.session_state.get("master_hide_cols_toggle") else None
+                )
+                md_write_master_sheet(
+                    writer.book, master_df, column_order=active_master_order,
+                    field_map=exec_field_map, hide_columns=master_hide_columns,
+                )
+
+            # ---------------------------------------------------------------------
+            # Feature request: "at time both excel sheet download" — a second,
+            # separate workbook containing ONLY the Master_Dashboard-8 sheet, built
+            # from the exact same (already-filtered) master_df, so it always matches
+            # the combined file above.
+            # ---------------------------------------------------------------------
+            master_only_wb = Workbook()
+            master_only_wb.remove(master_only_wb.active)
+            md_write_master_sheet(
+                master_only_wb, master_df, column_order=active_master_order,
+                field_map=exec_field_map, hide_columns=master_hide_columns,
+            )
+            master_only_stream = io.BytesIO()
+            master_only_wb.save(master_only_stream)
+
+            # IMPORTANT: st.button() only reports True on the exact run it was
+            # clicked — any later rerun (e.g. from clicking one of the PDF
+            # buttons below) makes this whole "if" block skip entirely again.
+            # So the results are stashed in session_state here, and everything
+            # that follows (metrics, downloads, PDF export) is rendered from
+            # session_state OUTSIDE this button's "if", where it survives reruns.
+            st.session_state["consolidation_result"] = {
+                "output_bytes": output_stream.getvalue(),
+                "master_only_output_bytes": master_only_stream.getvalue(),
+                "master_df": master_df,
+                "active_master_order": active_master_order,
+                "master_log": master_log,
+                "processed_dataframes": processed_dataframes,
+                "rows_before_filter": rows_before_filter,
+                "rows_after_filter": rows_after_filter,
+            }
+            # Clear any stale PDFs from a previous run so old data can't be re-downloaded.
+            st.session_state.pop("all_tabs_pdf_bytes", None)
+            st.session_state.pop("master_pdf_bytes", None)
+
+        # ---------------------------------------------------------------------------
+        # Everything below reads from session_state, not local variables, so it keeps
+        # working across reruns triggered by the PDF buttons (see note above).
+        # ---------------------------------------------------------------------------
+        result = st.session_state.get("consolidation_result")
+        if result:
+            st.success("✅ Consolidation and Formatting Complete!")
+
+            master_df = result["master_df"]
+            active_master_order = result["active_master_order"]
+            master_log = result["master_log"]
+            processed_dataframes = result["processed_dataframes"]
+
+            rows_before_filter = result.get("rows_before_filter")
+            rows_after_filter = result.get("rows_after_filter")
+            if rows_before_filter is not None and rows_after_filter is not None and rows_before_filter != rows_after_filter:
+                st.caption(
+                    f"🔀 Series/Company-Name filters kept {rows_after_filter} of "
+                    f"{rows_before_filter} Master_Dashboard-8 rows."
+                )
+
+            if master_log:
+                with st.expander(f"⚠️ Master_Dashboard-8: {len(master_log)} warning(s)"):
+                    for line in master_log:
+                        st.write("- " + line)
+
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Master_Dashboard-8 Symbols", len(master_df))
+            m2.metric("Columns", len(active_master_order))
+            if "Symbol" in master_df.columns:
+                m3.metric("Duplicate Symbols", int(master_df["Symbol"].duplicated().sum()))
+                m4.metric("Blank Symbols", int((master_df["Symbol"].astype(str).str.strip() == "").sum()))
+            st.dataframe(master_df[active_master_order].head(20), use_container_width=True)
+
+            ts = datetime.now().strftime('%Y%m%d_%H%M')
+
+            dl_col1, dl_col2 = st.columns(2)
+            with dl_col1:
+                st.download_button(
+                    label="📥 Download Formatted Master File",
+                    data=result["output_bytes"],
+                    file_name=f"Master_Financial_Data_{ts}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary",
+                    key="download_xlsx_btn",
+                )
+            with dl_col2:
+                st.download_button(
+                    label="📥 Download Master_Dashboard-8 Only (separate Excel)",
+                    data=result["master_only_output_bytes"],
+                    file_name=f"Master_Dashboard-8_{ts}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="download_master_only_xlsx_btn",
+                )
+
+            st.markdown("---")
+            st.subheader("📄 PDF Export")
+            st.caption(
+                "A PDF can't host live Excel-style AutoFilter dropdown arrows — that's an "
+                "Excel-only interactive feature no PDF viewer supports. What these PDFs DO "
+                "give you: the exact rows/columns you've already filtered above (dedupe, row "
+                "removal, value exclusion, column order), laid out tab by tab with a clickable "
+                "list of tabs up front. For live/changeable filtering, keep using the .xlsx file "
+                "— every tab there already has a real AutoFilter enabled."
+            )
+            pdf_col1, pdf_col2 = st.columns(2)
+            with pdf_col1:
+                if st.button("📄 Build All-Tabs PDF", key="build_all_pdf_btn"):
+                    with st.spinner("Building All-Tabs PDF…"):
+                        all_tabs_pdf = build_pdf_bytes(processed_dataframes, title="Financial Data — All Tabs")
+                        st.session_state["all_tabs_pdf_bytes"] = all_tabs_pdf.getvalue()
+                if st.session_state.get("all_tabs_pdf_bytes"):
+                    st.download_button(
+                        label="📥 Download All-Tabs PDF",
+                        data=st.session_state["all_tabs_pdf_bytes"],
+                        file_name=f"All_Tabs_{ts}.pdf",
+                        mime="application/pdf",
+                        key="download_all_pdf_btn",
+                    )
+            with pdf_col2:
+                if st.button("📄 Build Master_Dashboard-8 PDF", key="build_master_pdf_btn"):
+                    with st.spinner("Building Master_Dashboard-8 PDF…"):
+                        md_pdf = build_pdf_bytes(
+                            {MASTER_SHEET_NAME: master_df[active_master_order]},
+                            title="Master_Dashboard-8"
+                        )
+                        st.session_state["master_pdf_bytes"] = md_pdf.getvalue()
+                if st.session_state.get("master_pdf_bytes"):
+                    st.download_button(
+                        label="📥 Download Master_Dashboard-8 PDF",
+                        data=st.session_state["master_pdf_bytes"],
+                        file_name=f"Master_Dashboard-8_{ts}.pdf",
+                        mime="application/pdf",
+                        key="download_master_pdf_btn",
+                    )
+
+# =====================================================================================
+# 6. Scroll-to-anchor execution — runs last so every anchor already exists in the DOM.
+#    Consumes and clears the pending scroll target so it only fires once per click.
+# =====================================================================================
+_scroll_target = st.session_state.get("scroll_target")
+if _scroll_target:
+    st.session_state["scroll_target"] = None
+    components.html(
+        f"""
+        <script>
+            setTimeout(function() {{
+                var el = window.parent.document.getElementById("{_scroll_target}");
+                if (el) {{ el.scrollIntoView({{behavior: "smooth", block: "start"}}); }}
+            }}, 150);
+        </script>
+        """,
+        height=0,
+    )
