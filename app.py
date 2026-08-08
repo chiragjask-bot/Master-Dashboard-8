@@ -413,7 +413,7 @@ NUMBER_FORMATS = {
 #     Consolidation", right after all tabs are written into the same workbook.
 # =====================================================================================
 MASTER_SHEET_NAME = "Master_Dashboard-8"
-MASTER_HIGHLIGHT_COLOR = "EAD1DC"
+MASTER_HIGHLIGHT_COLOR = "eef6ff"
 MASTER_HEADER_SCAN_ROWS = 15
 MASTER_SYMBOL_ALIASES = ["SYMBOL", "TckrSymb", "Symb", "Symbol"]
 # Safety cap: one Data Validation object is created per row for the Symbol
@@ -1157,38 +1157,45 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             )
 
         # ---- Conditional formatting: Price Change (green = price up, red =
-        # price down) — the doc flagged this column as missing a highlight rule.
+        # price down) — no background fill, matching the reference colour sheet.
         if "Price Change" in labels:
             col_letter = ws.cell(row=1, column=labels.index("Price Change") + 1).column_letter
             rng = f"{col_letter}2:{col_letter}{last_row}"
             first = f"{col_letter}2"
-            up_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
-            down_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+
+            # Text: #339966 (Green) — no background fill
+            up_font = Font(color="339966", bold=False)
+
+            # Text: #FF0000 (Red) — no background fill
+            down_font = Font(color="FF0000", bold=False)
+
             ws.conditional_formatting.add(
-                rng, FormulaRule(formula=[f"{first}>0"], fill=up_fill, stopIfTrue=True)
+                rng, FormulaRule(formula=[f"{first}>0"], font=up_font, stopIfTrue=True)
             )
             ws.conditional_formatting.add(
-                rng, FormulaRule(formula=[f"{first}<0"], fill=down_fill, stopIfTrue=True)
+                rng, FormulaRule(formula=[f"{first}<0"], font=down_font, stopIfTrue=True)
             )
 
         # ---- Conditional formatting: Bull/Bear Run Output — green for "Bull",
-        # red for "Bear", grey for "Neutral" (the doc flagged this column as
-        # missing a highlight rule).
+        # red for "Bear", plain/uncoloured for "Unconfirmed". BUGFIX: the actual
+        # cell value is an emoji-prefixed string ("🟢 Bull", "🔴 Bear", "⚪
+        # Unconfirmed" — see the Bull/Bear formula written earlier in this
+        # function), so an exact-equality check against "Bull"/"Bear"/"Neutral"
+        # could never match; switched to a SEARCH()-based substring match so it
+        # actually fires regardless of the emoji/exact wording.
         if "Bull/Bear Run Output" in labels:
             col_letter = ws.cell(row=1, column=labels.index("Bull/Bear Run Output") + 1).column_letter
             rng = f"{col_letter}2:{col_letter}{last_row}"
             first = f"{col_letter}2"
-            bull_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+            bull_fill = PatternFill(start_color="CCFFCC", end_color="CCFFCC", fill_type="solid")
+            bull_font = Font(color="006100", bold=False)
             bear_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
-            neutral_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+            bear_font = Font(color="9C0006", bold=False)
             ws.conditional_formatting.add(
-                rng, FormulaRule(formula=[f'{first}="Bull"'], fill=bull_fill, stopIfTrue=True)
+                rng, FormulaRule(formula=[f'ISNUMBER(SEARCH("Bull",{first}))'], fill=bull_fill, font=bull_font, stopIfTrue=True)
             )
             ws.conditional_formatting.add(
-                rng, FormulaRule(formula=[f'{first}="Bear"'], fill=bear_fill, stopIfTrue=True)
-            )
-            ws.conditional_formatting.add(
-                rng, FormulaRule(formula=[f'{first}="Neutral"'], fill=neutral_fill, stopIfTrue=True)
+                rng, FormulaRule(formula=[f'ISNUMBER(SEARCH("Bear",{first}))'], fill=bear_fill, font=bear_font, stopIfTrue=True)
             )
 
         # ---- Conditional formatting: Difference from 200 DMA — green when the
@@ -1214,68 +1221,88 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             col_letter = ws.cell(row=1, column=labels.index("% Change") + 1).column_letter
             rng = f"{col_letter}2:{col_letter}{last_row}"
             first = f"{col_letter}2"
-            up_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+
+            # Background: #CCFFCC (Light Green) for > 3%, Text: #006100, Bold
+            up_fill = PatternFill(start_color="CCFFCC", end_color="CCFFCC", fill_type="solid")
+            up_font = Font(color="006100", bold=True)
+
+            # Background: #FFC7CE (Light Red), Text: #9C0006, not bold
             down_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+            down_font = Font(color="9C0006", bold=False)
+
             ws.conditional_formatting.add(
-                rng, FormulaRule(formula=[f"{first}>3"], fill=up_fill, stopIfTrue=True)
+                rng, FormulaRule(formula=[f"{first}>3"], fill=up_fill, font=up_font, stopIfTrue=True)
             )
             ws.conditional_formatting.add(
-                rng, FormulaRule(formula=[f"{first}<-3"], fill=down_fill, stopIfTrue=True)
+                rng, FormulaRule(formula=[f"{first}<-3"], fill=down_fill, font=down_font, stopIfTrue=True)
             )
 
         # ---- Conditional formatting: CMP/LTP, Close Price, Prev Close — near
-        # the 52-week HIGH (negative for you) vs near the 52-week LOW (positive
-        # for you), with a stronger colour when that high/low happened in the
-        # last 7 days and a lighter colour when it happened within the last 30
-        # days ("this month"). Feature request formulas, adapted to this sheet's
-        # real 52W High/Low columns instead of the M2/O2 example cells:
+        # the 52-week HIGH (caution) vs near the 52-week LOW (buy zone).
+        # Feature request formulas:
         #   near 52W High: AND(price<>"",52WHigh<>"",price>=52WHigh*0.92)
         #   near 52W Low:  AND(price<>"",52WLow<>"",price<=52WLow*1.08)
-        # Narrowest (7-day) rule goes first with stop_if_true=True so a hit in
-        # the last 7 days shows only the strong colour, not both.
+        # Single-tier per the reference colour sheet (no separate 7-day/30-day
+        # shade split) — solid colour whenever the price itself is within the
+        # threshold, independent of how recently that high/low happened.
         high52_col = ws.cell(row=1, column=labels.index("52W High") + 1).column_letter if "52W High" in labels else None
-        highdate52_col = ws.cell(row=1, column=labels.index("52W High Date") + 1).column_letter if "52W High Date" in labels else None
         low52_col = ws.cell(row=1, column=labels.index("52W Low") + 1).column_letter if "52W Low" in labels else None
-        lowdate52_col = ws.cell(row=1, column=labels.index("52W Low Date") + 1).column_letter if "52W Low Date" in labels else None
-        if high52_col and highdate52_col and low52_col and lowdate52_col:
-            strong_high_fill = PatternFill(start_color="FF6666", end_color="FF6666", fill_type="solid")
-            light_high_fill = PatternFill(start_color="FFD9D9", end_color="FFD9D9", fill_type="solid")
-            strong_low_fill = PatternFill(start_color="63BE7B", end_color="63BE7B", fill_type="solid")
-            light_low_fill = PatternFill(start_color="D6F2DE", end_color="D6F2DE", fill_type="solid")
+        if high52_col and low52_col:
+            # Background: #00B050 (Green) near 52W Low, Text: White, Bold
+            near_low_fill = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid")
+            near_low_font = Font(color="FFFFFF", bold=True)
+            # Background: #C0504D (Red) near 52W High, Text: White, Bold
+            near_high_fill = PatternFill(start_color="C0504D", end_color="C0504D", fill_type="solid")
+            near_high_font = Font(color="FFFFFF", bold=True)
             for price_label in ("CMP/LTP", "Close Price", "Prev Close"):
                 if price_label not in labels:
                     continue
                 col_letter = ws.cell(row=1, column=labels.index(price_label) + 1).column_letter
                 rng = f"{col_letter}2:{col_letter}{last_row}"
                 p = f"{col_letter}2"
-                h, hd = f"{high52_col}2", f"{highdate52_col}2"
-                l, ld = f"{low52_col}2", f"{lowdate52_col}2"
-                near_high = f'{p}<>"",{h}<>"",{p}>={h}*0.92'
-                near_low = f'{p}<>"",{l}<>"",{p}<={l}*1.08'
+                h, l = f"{high52_col}2", f"{low52_col}2"
+                near_high = f'AND({p}<>"",{h}<>"",{p}>={h}*0.92)'
+                near_low = f'AND({p}<>"",{l}<>"",{p}<={l}*1.08)'
                 ws.conditional_formatting.add(
-                    rng, FormulaRule(
-                        formula=[f'AND({near_high},{hd}<>"",{hd}<=TODAY(),{hd}>=TODAY()-7)'],
-                        fill=strong_high_fill, stopIfTrue=True,
-                    )
+                    rng, FormulaRule(formula=[near_high], fill=near_high_fill, font=near_high_font, stopIfTrue=True)
                 )
                 ws.conditional_formatting.add(
-                    rng, FormulaRule(
-                        formula=[f'AND({near_high},{hd}<>"",{hd}<=TODAY(),{hd}>=TODAY()-30)'],
-                        fill=light_high_fill, stopIfTrue=True,
-                    )
+                    rng, FormulaRule(formula=[near_low], fill=near_low_fill, font=near_low_font, stopIfTrue=True)
                 )
-                ws.conditional_formatting.add(
-                    rng, FormulaRule(
-                        formula=[f'AND({near_low},{ld}<>"",{ld}<=TODAY(),{ld}>=TODAY()-7)'],
-                        fill=strong_low_fill, stopIfTrue=True,
-                    )
-                )
-                ws.conditional_formatting.add(
-                    rng, FormulaRule(
-                        formula=[f'AND({near_low},{ld}<>"",{ld}<=TODAY(),{ld}>=TODAY()-30)'],
-                        fill=light_low_fill, stopIfTrue=True,
-                    )
-                )
+
+        # ---- Conditional formatting: CAR Rating — green for "Buy/Average Out",
+        # red for "Avoid/Hold", plain/uncoloured for "Short History" / "Enter
+        # Stock" / "Ticker Not Found". SEARCH()-based substring match, same
+        # reasoning as Bull/Bear Run Output above (the real formula's actual
+        # values carry emoji before/after the label text — see the CAR Rating
+        # formula written earlier in this function).
+        if "CAR Rating" in labels:
+            col_letter = ws.cell(row=1, column=labels.index("CAR Rating") + 1).column_letter
+            rng = f"{col_letter}2:{col_letter}{last_row}"
+            first = f"{col_letter}2"
+            car_buy_fill = PatternFill(start_color="CCFFCC", end_color="CCFFCC", fill_type="solid")
+            car_buy_font = Font(color="006100", bold=False)
+            car_avoid_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+            car_avoid_font = Font(color="9C0006", bold=False)
+            ws.conditional_formatting.add(
+                rng, FormulaRule(formula=[f'ISNUMBER(SEARCH("Buy/Average Out",{first}))'], fill=car_buy_fill, font=car_buy_font, stopIfTrue=True)
+            )
+            ws.conditional_formatting.add(
+                rng, FormulaRule(formula=[f'ISNUMBER(SEARCH("Avoid/Hold",{first}))'], fill=car_avoid_fill, font=car_avoid_font, stopIfTrue=True)
+            )
+
+        # ---- Conditional formatting: Bottom Hunting Column — bold green for
+        # "Start GTT", plain/uncoloured for "Wait for Bottom Out" (no red used
+        # here, matching the reference colour sheet).
+        if "Bottom Hunting Column" in labels:
+            col_letter = ws.cell(row=1, column=labels.index("Bottom Hunting Column") + 1).column_letter
+            rng = f"{col_letter}2:{col_letter}{last_row}"
+            first = f"{col_letter}2"
+            hunt_fill = PatternFill(start_color="CCFFCC", end_color="CCFFCC", fill_type="solid")
+            hunt_font = Font(color="006100", bold=True)
+            ws.conditional_formatting.add(
+                rng, FormulaRule(formula=[f'ISNUMBER(SEARCH("Start GTT",{first}))'], fill=hunt_fill, font=hunt_font, stopIfTrue=True)
+            )
 
 
     # Feature (box display & pop-up box both option) in Symbol column"). Two
@@ -2186,7 +2213,7 @@ if all_candidate_files or custom_tab_files:
             output_stream = io.BytesIO()
 
             NAV_ROW = 1  # excel row 1 on every data sheet is reserved for the "⬆️ Main Tab" jump-back link
-            LINK_FONT = Font(color="0563C1", underline="single", bold=True)
+            LINK_FONT = Font(color="0563C1", underline=None, bold=True)
 
             # Computed early (before the Main Tab hub sheet is built below) so the
             # same field map drives both the Main-Tab highlight and the
