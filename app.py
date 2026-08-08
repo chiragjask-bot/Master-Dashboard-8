@@ -1814,8 +1814,6 @@ DEFAULT_URLS = [
     "https://www.nseindia.com/market-data/live-equity-market",
     "https://www.nseindia.com/market-data/pre-open-market-cm-and-emerge-market",
     "https://innovacia.in/?s="
-    "https://chartink.com/search_stocks?term=",
-    "https://www.google.com/search?q=",
     "https://www.nseindia.com/resources/exchange-communication-press-releases"
     "https://www.nseindia.com/resources/exchange-communication-circulars"
     "https://www.nseindia.com/companies-listing/corporate-filings-voting-results"
