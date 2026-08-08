@@ -865,13 +865,13 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
         # clickable dot. Clicking the dot opens the URL exactly like before —
         # only the display text changed, not the link behaviour.
         HYPERLINK_SPECS = {
-            "NSE Chart": ("https://www.nseindia.com/get-quotes/equity?symbol=", "", "🟢"),
-            "Trading View": ("https://www.tradingview.com/symbols/NSE-", "/", "Tr, "),
-            "History Data": ("https://finance.yahoo.com/quote/", ".NS/history", "Hy, "),
-            "Chartlink": ("https://chartink.com/stocks/", ".html", "Cl1, "),
-            "Chartlink-2": ("https://www.screener.in/company/", ".html", "Scr, "),
-            "Marketsmith": ("https://marketsmithindia.com/mstool/evaluation.jsp?symbol=", "", "Ms, "),
-            "Zerodha": ("https://zerodha.com/markets/stocks/NSE/", "/", "Z, "),
+            "NSE Chart": ("https://www.nseindia.com/get-quotes/equity?symbol=", "", "🟢" ),
+            "Trading View": ("https://www.tradingview.com/symbols/NSE-", "/", "Tr" ),
+            "History Data": ("https://finance.yahoo.com/quote/", ".NS/history", "Hy" ),
+            "Chartlink": ("https://chartink.com/stocks/", ".html", "Cl"),
+            "Chartlink-2": ("https://www.screener.in/company/", ".html", "Scr" ),
+            "Marketsmith": ("https://marketsmithindia.com/mstool/evaluation.jsp?symbol=", "", "Ms" ),
+            "Zerodha": ("https://zerodha.com/markets/stocks/NSE/", "/", "Z" ),
         }
 
         for r in range(2, len(df) + 2):
@@ -880,7 +880,7 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             for label, (prefix, suffix, display) in HYPERLINK_SPECS.items():
                 if label in labels:
                     col = labels.index(label) + 1
-                    formula = f'=HYPERLINK("{prefix}"&{sym_cell}&"{suffix}","{display}")'
+                    formula = f'=HYPERLINK("{prefix}"&{sym_cell}&"{suffix}",""{display}" &{sym_cell}")'
                     ws.cell(row=r, column=col, value=formula)
 
             # DMAs — GOOGLEFINANCE-based, Google Sheets only (per the doc's own
