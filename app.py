@@ -866,7 +866,7 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
         # only the display text changed, not the link behaviour.
         HYPERLINK_SPECS = {
             "NSE Chart": ("https://www.nseindia.com/get-quotes/equity?symbol=", "", "🟢"),
-            "Trading View": ("https://www.tradingview.com/symbols/NSE-", "/", "Tr " &"/"),
+            "Trading View": ("https://www.tradingview.com/symbols/NSE-", "/", "Tr" &"/"),
             "History Data": ("https://finance.yahoo.com/quote/", ".NS/history", "Hy" &"/"),
             "Chartlink": ("https://chartink.com/stocks/", ".html", "Cl1" &"/"),
             "Chartlink-2": ("https://www.screener.in/company/", ".html", "Scr" &"/"),
