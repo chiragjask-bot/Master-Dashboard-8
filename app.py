@@ -866,12 +866,12 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
         # only the display text changed, not the link behaviour.
         HYPERLINK_SPECS = {
             "NSE Chart": ("https://www.nseindia.com/get-quotes/equity?symbol=", "", "🟢"),
-            "Trading View": ("https://www.tradingview.com/symbols/NSE-", "/", "Tr &"/""),
-            "History Data": ("https://finance.yahoo.com/quote/", ".NS/history", "Hy &"/""),
-            "Chartlink": ("https://chartink.com/stocks/", ".html", "Cl1 &"/""),
-            "Chartlink-2": ("https://www.screener.in/company/", ".html", "Scr &"/""),
-            "Marketsmith": ("https://marketsmithindia.com/mstool/evaluation.jsp?symbol=", "", "Ms &"/""),
-            "Zerodha": ("https://zerodha.com/markets/stocks/NSE/", "/", "z &"/""),
+            "Trading View": ("https://www.tradingview.com/symbols/NSE-", "/", "Tr " &"/"),
+            "History Data": ("https://finance.yahoo.com/quote/", ".NS/history", "Hy" &"/"),
+            "Chartlink": ("https://chartink.com/stocks/", ".html", "Cl1" &"/"),
+            "Chartlink-2": ("https://www.screener.in/company/", ".html", "Scr" &"/"),
+            "Marketsmith": ("https://marketsmithindia.com/mstool/evaluation.jsp?symbol=", "", "Ms" &"/"),
+            "Zerodha": ("https://zerodha.com/markets/stocks/NSE/", "/", "z" &"/"),
         }
 
         for r in range(2, len(df) + 2):
