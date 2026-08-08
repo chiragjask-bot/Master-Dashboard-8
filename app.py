@@ -1822,6 +1822,7 @@ DEFAULT_URLS = [
     "https://www.nseindia.com/companies-listing/corporate-filings-postal-ballot"
     "https://www.nseindia.com/companies-listing/corporate-filings-unitholding-pattern"
     "https://www.nseindia.com/companies-listing/corporate-filings-shareholding-pattern"
+    "https://www.nseindia.com/static/market-data/market-timings"
 ]
 
 if "custom_urls" not in st.session_state:
