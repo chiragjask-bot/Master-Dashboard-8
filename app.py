@@ -1821,8 +1821,8 @@ DEFAULT_URLS = [
     "https://www.nseindia.com/companies-listing/corporate-filings-unitholding-pattern",
     "https://www.nseindia.com/companies-listing/corporate-filings-shareholding-pattern",
     "https://www.nseindia.com/static/market-data/market-timings"
-    "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv",
-    "https://nsearchives.nseindia.com/emerge/corporates/content/SME_EQUITY_L.csv",
+    "https://nsearchives.nseindia.com/content/equities/EQUITY_L",
+    "https://nsearchives.nseindia.com/emerge/corporates/content/SME_EQUITY_L",
     "https://nsearchives.nseindia.com/web/sites/default/files/inline-files/Eligible_T0_Securities_4.xlsx",
     "https://nsearchives.nseindia.com/content/equities/PREF.csv",
     "https://nsearchives.nseindia.com/content/equities/WARRANT.csv",
