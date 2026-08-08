@@ -1141,7 +1141,11 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             col_letter = ws.cell(row=1, column=labels.index("Date of Listing") + 1).column_letter
             rng = f"{col_letter}2:{col_letter}{last_row}"
             first = f"{col_letter}2"
-            listing_fill = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")
+            
+            # Background: #00B050 (Green), Text: #FFFFFF, Bold
+            listing_fill = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid")
+            listing_font = Font(color="FFFFFF", bold=True)
+            
             this_year = f"DATE(YEAR(TODAY()),MONTH({first}),DAY({first}))"
             next_year = f"DATE(YEAR(TODAY())+1,MONTH({first}),DAY({first}))"
             formula = (
@@ -1149,7 +1153,7 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
                 f"AND({next_year}>=TODAY(),{next_year}<=TODAY()+30))"
             )
             ws.conditional_formatting.add(
-                rng, FormulaRule(formula=[formula], fill=listing_fill, stopIfTrue=True)
+                rng, FormulaRule(formula=[formula], fill=listing_fill, font=listing_font, stopIfTrue=True)
             )
 
         # ---- Conditional formatting: Price Change (green = price up, red =
