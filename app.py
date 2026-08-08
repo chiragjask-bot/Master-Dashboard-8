@@ -866,73 +866,73 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
         # only the display text changed, not the link behaviour.
         # Format: "Label": (prefix, suffix, display_prefix, use_cell_in_display)
         HYPERLINK_SPECS = {
-    "NSE Chart": (
-        "https://www.nseindia.com/get-quotes/equity?symbol=",
-        "",
-        "🟢",
-        False,
-    ),  # Static display
-    "Trading View": (
-        "https://www.tradingview.com/symbols/NSE-",
-        "/",
-        "Tre ",
-        True,
-    ),
-    "History Data": (
-        "https://www.historydata.com/url-here/",
-        "/",
-        "his ",
-        True,
-    ),  # Replace with actual base URL
-    "Screener": (
-        "https://www.screener.in/company/",
-        "/consolidated/",
-        "Scr ",
-        True,
-    ),  # Replace with actual base URL structure
-    "Zerodha": (
-        "https://kite.zerodha.com/chart/ext/bullet/2727/INFY/",
-        "",
-        "Z ",
-        True,
-    ),  # Replace with actual base URL
-    "Chartlink": (
-        "https://www.chartlink.com/stocks/",
-        "",
-        "CL ",
-        True,
-    ),  # Replace with actual base URL
-    "Marketsmith": (
-        "https://marketsmithindia.com/mstool/eval/",
-        ".jsp",
-        "ms ",
-        True,
-    ),  # Replace with actual base URL
-}
+            "NSE Chart": (
+                "https://www.nseindia.com/get-quotes/equity?symbol=",
+                "",
+                "🟢",
+                False,
+            ),  # Static display
+            "Trading View": (
+                "https://www.tradingview.com/symbols/NSE-",
+                "/",
+                "Tre ",
+                True,
+            ),
+            "History Data": (
+                "https://www.historydata.com/url-here/",
+                "/",
+                "his ",
+                True,
+            ),  # Replace with actual base URL
+            "Screener": (
+                "https://www.screener.in/company/",
+                "/consolidated/",
+                "Scr ",
+                True,
+            ),  # Replace with actual base URL structure
+            "Zerodha": (
+                "https://kite.zerodha.com/chart/ext/bullet/2727/INFY/",
+                "",
+                "Z ",
+                True,
+            ),  # Replace with actual base URL
+            "Chartlink": (
+                "https://www.chartlink.com/stocks/",
+                "",
+                "CL ",
+                True,
+            ),  # Replace with actual base URL
+            "Marketsmith": (
+                "https://marketsmithindia.com/mstool/eval/",
+                ".jsp",
+                "ms ",
+                True,
+            ),  # Replace with actual base URL
+        }
 
-for r in range(2, len(df) + 2):
-  sym_cell = f"{sym_col}{r}"
+        for r in range(2, len(df) + 2):
+            sym_cell = f"{sym_col}{r}"
 
-  for label, (
-      prefix,
-      suffix,
-      display_val,
-      use_cell_in_display,
-  ) in HYPERLINK_SPECS.items():
-    if label in labels:
-      col = labels.index(label) + 1
+            for label, (
+                prefix,
+                suffix,
+                display_val,
+                use_cell_in_display,
+            ) in HYPERLINK_SPECS.items():
+                if label in labels:
+                    col = labels.index(label) + 1
 
-      if use_cell_in_display:
-        formula = (
-            f'=HYPERLINK("{prefix}"&{sym_cell}&"{suffix}","{display_val}"&'
-            f"{sym_cell})"
-        )
-      else:
-        formula = (
-            f'=HYPERLINK("{prefix}"&{sym_cell}&"{suffix}","{display_val}")'
-        )
+                    if use_cell_in_display:
+                        formula = (
+                            f'=HYPERLINK("{prefix}"&{sym_cell}&"{suffix}","{display_val}"&'
+                            f"{sym_cell})"
+                        )
+                    else:
+                        formula = (
+                            f'=HYPERLINK("{prefix}"&{sym_cell}&"{suffix}","{display_val}")'
+                        )
 
-      ws.cell(row=r, column=col, value=formula)
+                    ws.cell(row=r, column=col, value=formula)
 
             # DMAs — GOOGLEFINANCE-based, Google Sheets only (per the doc's own
             # note). Exact formula requested: SORT(GOOGLEFINANCE("NSE:"&Symbol,
