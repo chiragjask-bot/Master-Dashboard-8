@@ -456,13 +456,13 @@ MASTER_FIELD_MAP = [
     {"label": "Turnover (Rs.)", "sheet": "BhavCopy_NSE_CM",
      "aliases": ["TtlTrfVal", "NET_TRDVAL", "NET_TRD_VAL", "NET TRD VAL", "NET TRDVAL", "Turnover (Rs.)", "NET TRADED VALUE", "Net Traded Value", "Traded Value"], "format": "qty"},
     {"label": "Issue Size", "sheet": "mcap", "aliases": ["Issue Size"], "format": "qty"},
-    {"label": "Mkt Cap (Rs. Crores)", "sheet": "StocksTraded", "aliases": ["Mkt Cap (Rs Crores)", "Mkt Cap (\u20b9 Crores)", "Market Cap (\u20b9 Crores)"], "format": "crores"},
-    {"label": "Market Cap(Rs.)", "sheet": "mcap", "aliases": ["Market Cap(Rs.)", "Mkt Cap(Rs.)", "Market Cap (Rs.)", "Mkt Cap (Rs.)", "Market Cap(Rs)", "Mkt Cap(Rs)", "Market Cap (Rs)", "Mkt Cap (Rs)"], "format": "qty"},
+    {"label": "Market Cap (Cr)", "sheet": "StocksTraded", "aliases": ["Mkt Cap (Rs Crores)", "Mkt Cap (\u20b9 Crores)", "Market Cap (\u20b9 Crores)", "Mkt Cap (Rs. Crores)"], "format": "crores"},
+    {"label": "Market Cap", "sheet": "mcap", "aliases": ["Market Cap(Rs.)", "Mkt Cap(Rs.)", "Market Cap (Rs.)", "Mkt Cap (Rs.)", "Market Cap(Rs)", "Mkt Cap(Rs)", "Market Cap (Rs)", "Mkt Cap (Rs)"], "format": "qty"},
     {"label": "Delivery %", "sheet": "sec_bhavdata_full",
      "aliases": ["DELIV PER", "DELIV %", "delivery percentage", "Delivery Percentage (%)", "DELIV_PER"], "format": "percent"},
-    {"label": "Value (Rs. Crores)", "sheet": "StocksTraded", "aliases": ["Value (Rs Crores)", "Value (\u20b9 Crores)"], "format": "crores"},
-    {"label": "Value (Rs.)", "sheet": "BhavCopy_NSE_CM", "aliases": ["TtlTrfVal", "NET_TRDVAL"], "format": "qty"},
-    {"label": "Volume (Lakhs)", "sheet": "StocksTraded", "aliases": ["Volume (Lakhs)"], "format": "lakhs"},
+    {"label": "Value (Cr.)", "sheet": "StocksTraded", "aliases": ["Value (Rs Crores)", "Value (\u20b9 Crores)", "Value (Rs. Crores)"], "format": "crores"},
+    {"label": "Value", "sheet": "BhavCopy_NSE_CM", "aliases": ["TtlTrfVal", "NET_TRDVAL"], "format": "qty"},
+    {"label": "Volume (Lakh)", "sheet": "StocksTraded", "aliases": ["Volume (Lakhs)"], "format": "lakhs"},
     {"label": "Volume", "sheet": "BhavCopy_NSE_CM", "aliases": ["TtlTradgVol", "NET_TRDQTY"], "format": "qty"},    
     {"label": "D% against Band", "sheet": None, "aliases": [], "format": "percent", "computed": True},
     {"label": "Band", "sheet": "sec_list", "aliases": ["Band"], "format": "number"},
@@ -602,9 +602,9 @@ MASTER_HIDE_COLUMNS = [
     "Remarks",
     "Face Value",
     "Market Lot",
-    "Mkt Cap (Rs. Crores)",
-    "Value (Rs. Crores)",
-    "Volume (Lakhs)",
+    "Market Cap (Cr)",
+    "Value (Cr.)",
+    "Volume (Lakh)",
     "Band",
     "Open (Rs.)",
     "High (Rs.)",
@@ -1252,8 +1252,8 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
         symbol_col_idx = labels.index("Symbol") + 1
         quick_fields = [l for l in [
             "CMP/LTP", "% Change", "Prev Close", "Delivery %",
-            "52W High", "52W Low", "Value (Rs. Crores)", "Turnover (Rs.)",
-            "Volume (Lakhs)", "Mkt Cap (Rs. Crores)", "Symbol P/E",
+            "52W High", "52W Low", "Value (Cr.)", "Turnover (Rs.)",
+            "Volume (Lakh)", "Market Cap (Cr)", "Symbol P/E",
         ] if l in labels]
         for r, row in enumerate(df.itertuples(index=False), start=2):
             row_dict = dict(zip(labels, row))
