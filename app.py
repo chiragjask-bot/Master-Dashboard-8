@@ -413,7 +413,7 @@ NUMBER_FORMATS = {
 #     Consolidation", right after all tabs are written into the same workbook.
 # =====================================================================================
 MASTER_SHEET_NAME = "Master_Dashboard-8"
-MASTER_HIGHLIGHT_COLOR = "EAD1DC"
+MASTER_HIGHLIGHT_COLOR = "eef6ff"
 MASTER_HEADER_SCAN_ROWS = 15
 MASTER_SYMBOL_ALIASES = ["SYMBOL", "TckrSymb", "Symb", "Symbol"]
 # Safety cap: one Data Validation object is created per row for the Symbol
@@ -1113,8 +1113,8 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
         (7, "C6EFCE"),    # green
         (15, "FFEB9C"),   # yellow
         (30, "FFD8A8"),   # orange
-        (180, "BDD7EE"),  # blue
-        (365, "E1D5E7"),  # purple
+        (180, "False"),  # blue-BDD7EE
+        (365, "False"),  # purple-E1D5E7
     ]
     last_row = ws.max_row
     if last_row >= 2:
@@ -1158,13 +1158,20 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             col_letter = ws.cell(row=1, column=labels.index("Price Change") + 1).column_letter
             rng = f"{col_letter}2:{col_letter}{last_row}"
             first = f"{col_letter}2"
-            up_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+            
+            # Background: #90EE90 (Light Green), Text: #006100, Bold
+            up_fill = PatternFill(start_color="90EE90", end_color="90EE90", fill_type="solid")
+            up_font = Font(color="006100", bold=True)
+            
+            # Background: #FFC7CE (Light Red), Text: #9C0006, Bold
             down_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+            down_font = Font(color="9C0006", bold=True)
+            
             ws.conditional_formatting.add(
-                rng, FormulaRule(formula=[f"{first}>0"], fill=up_fill, stopIfTrue=True)
+                rng, FormulaRule(formula=[f"{first}>0"], fill=up_fill, font=up_font, stopIfTrue=True)
             )
             ws.conditional_formatting.add(
-                rng, FormulaRule(formula=[f"{first}<0"], fill=down_fill, stopIfTrue=True)
+                rng, FormulaRule(formula=[f"{first}<0"], fill=down_fill, font=down_font, stopIfTrue=True)
             )
 
         # ---- Conditional formatting: Bull/Bear Run Output — green for "Bull",
@@ -1210,13 +1217,20 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             col_letter = ws.cell(row=1, column=labels.index("% Change") + 1).column_letter
             rng = f"{col_letter}2:{col_letter}{last_row}"
             first = f"{col_letter}2"
-            up_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
-            down_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+            
+            # Background: #00b050 (Green) for > 3%, Text: White, Bold
+            up_fill = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid")
+            up_font = Font(color="FFFFFF", bold=True)
+            
+            # Background: #c0504d (Red), Text: White, Bold
+            down_fill = PatternFill(start_color="C0504D", end_color="C0504D", fill_type="solid")
+            down_font = Font(color="FFFFFF", bold=True)
+            
             ws.conditional_formatting.add(
-                rng, FormulaRule(formula=[f"{first}>3"], fill=up_fill, stopIfTrue=True)
+                rng, FormulaRule(formula=[f"{first}>3"], fill=up_fill, font=up_font, stopIfTrue=True)
             )
             ws.conditional_formatting.add(
-                rng, FormulaRule(formula=[f"{first}<-3"], fill=down_fill, stopIfTrue=True)
+                rng, FormulaRule(formula=[f"{first}<-3"], fill=down_fill, font=down_font, stopIfTrue=True)
             )
 
         # ---- Conditional formatting: CMP/LTP, Close Price, Prev Close — near
@@ -2182,7 +2196,7 @@ if all_candidate_files or custom_tab_files:
             output_stream = io.BytesIO()
 
             NAV_ROW = 1  # excel row 1 on every data sheet is reserved for the "⬆️ Main Tab" jump-back link
-            LINK_FONT = Font(color="0563C1", underline="single", bold=True)
+            LINK_FONT = Font(color="0563C1", underline="False", bold=True)
 
             # Computed early (before the Main Tab hub sheet is built below) so the
             # same field map drives both the Main-Tab highlight and the
