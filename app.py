@@ -1108,13 +1108,11 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
     # TODAY() .. TODAY()+N (a future window), which a past date can never satisfy,
     # so the highlight silently never fired. Narrowest window first with
     # stop_if_true=True, so e.g. a date 5 days ago gets ONLY the 7-day green
-    # highlight, not also the 15/30/180/365-day colors underneath it.
+    # highlight, not also the 15/30-day colors underneath it.
     MASTER_52W_DATE_CF_RULES = [
         (7, "C6EFCE"),    # green
         (15, "FFEB9C"),   # yellow
         (30, "FFD8A8"),   # orange
-        (180, "BDD7EE"),  # blue
-        (365, "E1D5E7"),  # purple
     ]
     last_row = ws.max_row
     if last_row >= 2:
