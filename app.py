@@ -873,25 +873,25 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
                 False,
             ),  # Static display
             "Trading View": (
-                "https://www.tradingview.com/symbols/NSE-",
-                "/",
+                "https://www.tradingview.com/symbols/",
+                "",
                 "Tre ",
                 True,
             ),
             "History Data": (
-                "https://www.historydata.com/url-here/",
-                "/",
+                "https://www.equitypandit.com/historical-data/",
+                "",
                 "his ",
                 True,
             ),  # Replace with actual base URL
             "Screener": (
                 "https://www.screener.in/company/",
-                "/consolidated/",
+                "",
                 "Scr ",
                 True,
             ),  # Replace with actual base URL structure
             "Zerodha": (
-                "https://kite.zerodha.com/chart/ext/bullet/2727/INFY/",
+                "https://zerodha.com/markets/stocks/NSE/",
                 "",
                 "Z ",
                 True,
@@ -904,7 +904,7 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             ),  # Replace with actual base URL
             "Marketsmith": (
                 "https://marketsmithindia.com/mstool/eval/",
-                ".jsp",
+                "/evaluation.jsp",
                 "ms ",
                 True,
             ),  # Replace with actual base URL
