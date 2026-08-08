@@ -1814,6 +1814,7 @@ DEFAULT_URLS = [
     "https://www.nseindia.com/market-data/live-equity-market",
     "https://www.nseindia.com/market-data/pre-open-market-cm-and-emerge-market",
     "https://chartink.com/search_stocks?term=",
+    "https://www.google.com/search?q=",
 ]
 
 if "custom_urls" not in st.session_state:
