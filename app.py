@@ -866,7 +866,13 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
         # only the display text changed, not the link behaviour.
         # Format: "Label": (prefix, suffix, display_prefix, use_cell_in_display)
         HYPERLINK_SPECS = {
-            "Trading View": (
+    "NSE Chart": (
+        "https://www.nseindia.com/get-quotes/equity?symbol=",
+        "",
+        "🟢",
+        False,
+    ),  # Static display
+    "Trading View": (
         "https://www.tradingview.com/symbols/NSE-",
         "/",
         "Tre ",
@@ -902,12 +908,6 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
         "ms ",
         True,
     ),  # Replace with actual base URL
-    "NSE Chart": (
-        "https://www.nseindia.com/get-quotes/equity?symbol=",
-        "",
-        "🟢",
-        False,
-    ),  # Static display
 }
 
 for r in range(2, len(df) + 2):
