@@ -902,16 +902,16 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
                 col = labels.index("Bull/Bear Run Output") + 1
                 c_, e50, e100, e200 = f"{cmp_col}{r}", f"{d50_col}{r}", f"{d100_col}{r}", f"{d200_col}{r}"
                 formula = (
-                    f'=IF(AND({c_}>{e50},{e50}>{e100},{e100}>{e200}),"Bull",'
-                    f'IF(AND({c_}<{e50},{e50}<{e100},{e100}<{e200}),"Bear","Neutral"))'
+                    f'=IF(AND({c_}>{e50},{c_}>{e100},{c_}>{e200}, I2>=0.01, I2<=10),"🟢 Bull",'
+                    f'IF(AND({c_}<{e50},{c_}<{e100},{c_}<{e200}, I2>=-10, I2<=-0.01)),"🔴 Bear","⚪ Neutral"))'
                 )
                 ws.cell(row=r, column=col, value=formula)
 
             if "Difference from 200 DMA" in labels and cmp_col and d200_col:
                 col = labels.index("Difference from 200 DMA") + 1
                 # % difference of CMP from its 200 DMA, per the request:
-                # =((CMP-200 DMA)*100)/CMP  ->  e.g. =((AF2-AX2)*100)/AF2
-                formula = f"=(({cmp_col}{r}-{d200_col}{r})*100)/{cmp_col}{r}"
+                # =((CMP-200 DMA)*100)/200 DMA  ->  e.g. =((AF2-AX2)*100)/AX2
+                formula = f"=(({cmp_col}{r}-{d200_col}{r})*100)/{d200_col}{r}"
                 ws.cell(row=r, column=col, value=formula)
 
             # CAR Rating — exact LET()-based formula supplied in the request.
