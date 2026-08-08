@@ -1199,7 +1199,8 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
     if "Symbol" in labels and len(df) <= MAX_BOX_DISPLAY_ROWS:
         symbol_col_idx = labels.index("Symbol") + 1
         quick_fields = [l for l in [
-            "CMP/LTP", "% Change", "Close Price", "Prev Close",
+            "CMP/LTP", "% Change", "Price Change", "Delivery %",
+            "Prev Close", "52W High", "52W Low", "Turnover (Rs.)",
             "Volume (Lakhs)", "Mkt Cap (Rs. Crores)", "Symbol P/E",
         ] if l in labels]
         for r, row in enumerate(df.itertuples(index=False), start=2):
