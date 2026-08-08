@@ -1815,6 +1815,12 @@ DEFAULT_URLS = [
     "https://www.nseindia.com/market-data/pre-open-market-cm-and-emerge-market",
     "https://chartink.com/search_stocks?term=",
     "https://www.google.com/search?q=",
+    "https://www.nseindia.com/resources/exchange-communication-press-releases"
+    "https://www.nseindia.com/resources/exchange-communication-circulars"
+    "https://www.nseindia.com/companies-listing/corporate-filings-voting-results"
+    "https://www.nseindia.com/companies-listing/corporate-filings-postal-ballot"
+    "https://www.nseindia.com/companies-listing/corporate-filings-unitholding-pattern"
+    "https://www.nseindia.com/companies-listing/corporate-filings-shareholding-pattern"
 ]
 
 if "custom_urls" not in st.session_state:
