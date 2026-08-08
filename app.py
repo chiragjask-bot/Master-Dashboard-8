@@ -851,6 +851,7 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
         d50_col = ws.cell(row=1, column=labels.index("50 DMA") + 1).column_letter if "50 DMA" in labels else None
         d100_col = ws.cell(row=1, column=labels.index("100 DMA") + 1).column_letter if "100 DMA" in labels else None
         d200_col = ws.cell(row=1, column=labels.index("200 DMA") + 1).column_letter if "200 DMA" in labels else None
+        difd200_col = ws.cell(row=1, column=labels.index("Difference from 200 DMA") + 1).column_letter if "Difference from 200 DMA" in labels else None
 
         # NSE/TradingView/Chartlink/etc. — (url_prefix, url_suffix, link display text).
         # Verified live against each site on 2026-08-05 except Marketsmith (that
@@ -900,10 +901,10 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
 
             if "Bull/Bear Run Output" in labels and cmp_col and d50_col and d100_col and d200_col:
                 col = labels.index("Bull/Bear Run Output") + 1
-                c_, e50, e100, e200 = f"{cmp_col}{r}", f"{d50_col}{r}", f"{d100_col}{r}", f"{d200_col}{r}"
+                c_, e50, e100, e200, e400 = f"{cmp_col}{r}", f"{d50_col}{r}", f"{d100_col}{r}", f"{d200_col}{r}", f"{difd200_col}{r}"
                 formula = (
-                    f'=IF(AND({c_}>{e50},{c_}>{e100},{c_}>{e200}, I2>=0.01, I2<=10),"Bull",'
-                    f'IF(AND({c_}<{e50},{c_}<{e100},{c_}<{e200}, I2>=-10, I2<=-0.01)),"Bear","Neutral"))'
+                    f'=IF(AND({c_}>{e50},{c_}>{e100},{c_}>{e200}, {e400},{c_}>=0.01, {e400},{c_}<=10),"🟢 Bull",'
+                    f'IF(AND({c_}<{e50},{c_}<{e100},{c_}<{e200}, {e400},{c_}>=-10, {e400},{c_}<=-0.01)),"🔴 Bear","⚪ Unconfirmed"))'
                 )
                 ws.cell(row=r, column=col, value=formula)
 
