@@ -1813,13 +1813,13 @@ DEFAULT_URLS = [
     "https://www.nseindia.com/static/market-data/securities-available-for-trading",
     "https://www.nseindia.com/market-data/live-equity-market",
     "https://www.nseindia.com/market-data/pre-open-market-cm-and-emerge-market",
-    "https://innovacia.in/?s="
-    "https://www.nseindia.com/resources/exchange-communication-press-releases"
-    "https://www.nseindia.com/resources/exchange-communication-circulars"
-    "https://www.nseindia.com/companies-listing/corporate-filings-voting-results"
-    "https://www.nseindia.com/companies-listing/corporate-filings-postal-ballot"
-    "https://www.nseindia.com/companies-listing/corporate-filings-unitholding-pattern"
-    "https://www.nseindia.com/companies-listing/corporate-filings-shareholding-pattern"
+    "https://innovacia.in/?s=",
+    "https://www.nseindia.com/resources/exchange-communication-press-releases",
+    "https://www.nseindia.com/resources/exchange-communication-circulars",
+    "https://www.nseindia.com/companies-listing/corporate-filings-voting-results",
+    "https://www.nseindia.com/companies-listing/corporate-filings-postal-ballot",
+    "https://www.nseindia.com/companies-listing/corporate-filings-unitholding-pattern",
+    "https://www.nseindia.com/companies-listing/corporate-filings-shareholding-pattern",
     "https://www.nseindia.com/static/market-data/market-timings"
 ]
 
