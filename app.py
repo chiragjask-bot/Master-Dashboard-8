@@ -1113,8 +1113,8 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
         (7, "C6EFCE"),    # green
         (15, "FFEB9C"),   # yellow
         (30, "FFD8A8"),   # orange
-        (180, "BDD7EE"),  # blue
-        (365, "E1D5E7"),  # purple
+        (180, "True"),  # blue-BDD7EE
+        (365, "True"),  # purple-E1D5E7
     ]
     last_row = ws.max_row
     if last_row >= 2:
