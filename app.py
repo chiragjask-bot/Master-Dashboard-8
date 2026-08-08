@@ -507,6 +507,20 @@ MASTER_FIELD_MAP = [
     {"label": "100 DMA", "sheet": None, "aliases": [], "format": "price"},
     {"label": "200 DMA", "sheet": None, "aliases": [], "format": "price"},
     {"label": "Bull/Bear Run Output", "sheet": None, "aliases": [], "format": "text"},
+
+    # ---- New calculated columns (feature request: "Create New Column Name: 52W
+    # Local" and "Bottom Hunting Column"), placed between Bull/Bear Run Output and
+    # Trading View. Both are written as real, per-row Excel formulas (not Python-
+    # computed values) so they behave like a normal dragged-down formula — see the
+    # "52W Local" / "Bottom Hunting Column" block in md_write_master_sheet().
+    #   52W Local             = 52W Low * 1.2
+    #   Bottom Hunting Column = IF(AND(52W Low Date > 52W High Date,
+    #                                  52W Local > CMP/LTP,
+    #                                  (52W Local - CMP/LTP)*100/CMP/LTP < 10),
+    #                              "🟢 Start GTT", "🔴 Wait for Bottom Out")
+    {"label": "52W Local", "sheet": None, "aliases": [], "format": "price"},
+    {"label": "Bottom Hunting Column", "sheet": None, "aliases": [], "format": "text"},
+
     {"label": "Trading View", "sheet": None, "aliases": [], "format": "text"},
     {"label": "History Data", "sheet": None, "aliases": [], "format": "text"},
     {"label": "Chartlink", "sheet": None, "aliases": [], "format": "text"},
@@ -852,6 +866,10 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
         d100_col = ws.cell(row=1, column=labels.index("100 DMA") + 1).column_letter if "100 DMA" in labels else None
         d200_col = ws.cell(row=1, column=labels.index("200 DMA") + 1).column_letter if "200 DMA" in labels else None
         difd200_col = ws.cell(row=1, column=labels.index("Difference from 200 DMA") + 1).column_letter if "Difference from 200 DMA" in labels else None
+        low52_col_f = ws.cell(row=1, column=labels.index("52W Low") + 1).column_letter if "52W Low" in labels else None
+        low52date_col_f = ws.cell(row=1, column=labels.index("52W Low Date") + 1).column_letter if "52W Low Date" in labels else None
+        high52date_col_f = ws.cell(row=1, column=labels.index("52W High Date") + 1).column_letter if "52W High Date" in labels else None
+        local52_col_f = ws.cell(row=1, column=labels.index("52W Local") + 1).column_letter if "52W Local" in labels else None
 
         # NSE/TradingView/Chartlink/etc. — (url_prefix, url_suffix, link display text).
         # Verified live against each site on 2026-08-05 except Marketsmith (that
@@ -956,6 +974,29 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
                 formula = (
                     f'=IF(AND({c_}>{e50}, {c_}>{e100}, {c_}>{e200}, {e400}>=0.01, {e400}<=10), "🟢 Bull", '
                     f'IF(AND({c_}<{e50}, {c_}<{e100}, {c_}<{e200}, {e400}>=-10, {e400}<=-0.01), "🔴 Bear", "⚪ Unconfirmed"))'
+                )
+                ws.cell(row=r, column=col, value=formula)
+
+            # 52W Local = 52W Low x 1.2 (feature request: "Create New Column
+            # Name: 52W Local ... Formula: 52W Low x 1.2 = 52W Local"), written
+            # as a real per-row formula referencing that row's own 52W Low cell
+            # — so it behaves exactly like a normal dragged-down Excel formula.
+            if "52W Local" in labels and low52_col_f:
+                col = labels.index("52W Local") + 1
+                formula = f"={low52_col_f}{r}*1.2"
+                ws.cell(row=r, column=col, value=formula)
+
+            # Bottom Hunting Column (feature request formula):
+            # =IF(AND((52W Low Date>52W High Date),(52W Local>CMP),
+            #         ((52W Local-CMP)*100/CMP)<10),"🟢 Start GTT","🔴 Wait for Bottom Out")
+            if ("Bottom Hunting Column" in labels and local52_col_f and cmp_col
+                    and low52date_col_f and high52date_col_f):
+                col = labels.index("Bottom Hunting Column") + 1
+                aa, s = f"{local52_col_f}{r}", f"{cmp_col}{r}"
+                z, x = f"{low52date_col_f}{r}", f"{high52date_col_f}{r}"
+                formula = (
+                    f'=IF(AND(({z}>{x}),({aa}>{s}),(({aa}-{s})*100/{s})<10),'
+                    f'"\U0001f7e2 Start GTT","\U0001f534 Wait for Bottom Out")'
                 )
                 ws.cell(row=r, column=col, value=formula)
 
