@@ -897,7 +897,7 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
                 True,
             ),  # Replace with actual base URL
             "Chartlink": (
-                "https://www.chartlink.com/stocks/",
+                "https://chartink.com/stocks/",
                 ".html",
                 "CL ",
                 True,
