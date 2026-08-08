@@ -1821,6 +1821,20 @@ DEFAULT_URLS = [
     "https://www.nseindia.com/companies-listing/corporate-filings-unitholding-pattern",
     "https://www.nseindia.com/companies-listing/corporate-filings-shareholding-pattern",
     "https://www.nseindia.com/static/market-data/market-timings"
+    "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv",
+    "https://nsearchives.nseindia.com/emerge/corporates/content/SME_EQUITY_L.csv",
+    "https://nsearchives.nseindia.com/web/sites/default/files/inline-files/Eligible_T0_Securities_4.xlsx",
+    "https://nsearchives.nseindia.com/content/equities/PREF.csv",
+    "https://nsearchives.nseindia.com/content/equities/WARRANT.csv",
+    "https://nsearchives.nseindia.com/content/equities/namechange.csv",
+    "https://nsearchives.nseindia.com/content/equities/symbolchange.csv",
+    "https://nsearchives.nseindia.com/content/equities/INVITS_L.csv",
+    "https://nsearchives.nseindia.com/content/equities/REITS_L.csv"'
+    "https://nsearchives.nseindia.com/content/equities/mf_close-end.csv",
+    "https://nsearchives.nseindia.com/content/equities/eq_ilseclist.csv",
+    "https://nsearchives.nseindia.com/content/equities/eq_etfseclist.csv",
+    "https://nsearchives.nseindia.com//web/mediaattachment/2026-07/Permitted_Securities_20260702_20260702161218.xlsx"
+    
 ]
 
 if "custom_urls" not in st.session_state:
