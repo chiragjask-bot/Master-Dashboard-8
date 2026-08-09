@@ -521,6 +521,43 @@ MASTER_FIELD_MAP = [
     {"label": "52W Local", "sheet": None, "aliases": [], "format": "price"},
     {"label": "Bottom Hunting Column", "sheet": None, "aliases": [], "format": "text"},
 
+    # ---- New calculated columns (feature request: instruction_word_file_for_
+    # add_column.docx — "Create New Column Name" list, default placement
+    # "between Bottom Hunting Column and Trading View"). All 11 are written as
+    # real, per-row Excel/Google Sheets formulas (not Python-computed values),
+    # exactly like the DMA/52W Local/Bottom Hunting Column block above — see
+    # the matching block in md_write_master_sheet(). GOOGLEFINANCE()-based
+    # formulas (20/25 Days Highest/Low, Last 6 Month Minimum, 100 SMA) are
+    # Google Sheets only, same caveat as the DMA columns.
+    #   % from 52W High           = ((CMP - 52W High) / 52W High) * 100
+    #   % from 52W Low            = ((CMP - 52W Low) / 52W Low) * 100
+    #   20 Days Highest High      = highest "high" over the last 20 trading days
+    #   20 Days low               = lowest "low" over the last 20 trading days
+    #   20 Days Output            = IF(20 Days low = Low (Rs.), "🟢 Start GTT
+    #                                order at 20 days high and update regularly",
+    #                                "🔴 Do not wait for best time")
+    #   25 Days Low                = lowest "low" over the last 25 trading days
+    #   Our GTT Price              = 25 Days Low x 1.05
+    #   25 Days Output             = IF(AND(CMP < Our GTT Price, 52W High Date >
+    #                                52W Low Date), "🟢 Yes, Start GTT Order",
+    #                                "🔴 No wait and watch")
+    #   Last 6 Month Minimum*1.20  = lowest close over the last 180 days x 1.2
+    #   100 SMA                    = 100-day simple moving average of price
+    #   100 SMA Output             = IF(AND(CMP > 100 SMA, CMP > Last 6 Month
+    #                                Minimum*1.20, Prev Close < 100 SMA),
+    #                                "🟢 Buy Today", "🔴 Do Not Buy")
+    {"label": "% from 52W High", "sheet": None, "aliases": [], "format": "price"},
+    {"label": "% from 52W Low", "sheet": None, "aliases": [], "format": "price"},
+    {"label": "20 Days Highest High", "sheet": None, "aliases": [], "format": "price"},
+    {"label": "20 Days low", "sheet": None, "aliases": [], "format": "price"},
+    {"label": "20 Days Output", "sheet": None, "aliases": [], "format": "text"},
+    {"label": "25 Days Low", "sheet": None, "aliases": [], "format": "price"},
+    {"label": "Our GTT Price", "sheet": None, "aliases": [], "format": "price"},
+    {"label": "25 Days Output", "sheet": None, "aliases": [], "format": "text"},
+    {"label": "Last 6 Month Minimum*1.20", "sheet": None, "aliases": [], "format": "price"},
+    {"label": "100 SMA", "sheet": None, "aliases": [], "format": "price"},
+    {"label": "100 SMA Output", "sheet": None, "aliases": [], "format": "text"},
+
     {"label": "Trading View", "sheet": None, "aliases": [], "format": "text"},
     {"label": "History Data", "sheet": None, "aliases": [], "format": "text"},
     {"label": "Chartlink", "sheet": None, "aliases": [], "format": "text"},
@@ -870,6 +907,26 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
         low52date_col_f = ws.cell(row=1, column=labels.index("52W Low Date") + 1).column_letter if "52W Low Date" in labels else None
         high52date_col_f = ws.cell(row=1, column=labels.index("52W High Date") + 1).column_letter if "52W High Date" in labels else None
         local52_col_f = ws.cell(row=1, column=labels.index("52W Local") + 1).column_letter if "52W Local" in labels else None
+        high52_col_f = ws.cell(row=1, column=labels.index("52W High") + 1).column_letter if "52W High" in labels else None
+        low_rs_col_f = ws.cell(row=1, column=labels.index("Low (Rs.)") + 1).column_letter if "Low (Rs.)" in labels else None
+        prevclose_col_f = ws.cell(row=1, column=labels.index("Prev Close") + 1).column_letter if "Prev Close" in labels else None
+
+        # ---- New calculated columns (instruction_word_file_for_add_column.docx)
+        # — column-letter lookups for each new column's OWN cell, so formulas
+        # that reference "this row's 20 Days low" / "this row's Our GTT Price" /
+        # etc. (self-column references named in the doc's "Formula Meaning"
+        # lines) resolve to real cell refs, same pattern as local52_col_f above.
+        pct52high_col = ws.cell(row=1, column=labels.index("% from 52W High") + 1).column_letter if "% from 52W High" in labels else None
+        pct52low_col = ws.cell(row=1, column=labels.index("% from 52W Low") + 1).column_letter if "% from 52W Low" in labels else None
+        d20high_col = ws.cell(row=1, column=labels.index("20 Days Highest High") + 1).column_letter if "20 Days Highest High" in labels else None
+        d20low_col = ws.cell(row=1, column=labels.index("20 Days low") + 1).column_letter if "20 Days low" in labels else None
+        d20out_col = ws.cell(row=1, column=labels.index("20 Days Output") + 1).column_letter if "20 Days Output" in labels else None
+        d25low_col = ws.cell(row=1, column=labels.index("25 Days Low") + 1).column_letter if "25 Days Low" in labels else None
+        gtt_col = ws.cell(row=1, column=labels.index("Our GTT Price") + 1).column_letter if "Our GTT Price" in labels else None
+        d25out_col = ws.cell(row=1, column=labels.index("25 Days Output") + 1).column_letter if "25 Days Output" in labels else None
+        min6mo_col = ws.cell(row=1, column=labels.index("Last 6 Month Minimum*1.20") + 1).column_letter if "Last 6 Month Minimum*1.20" in labels else None
+        sma100_col = ws.cell(row=1, column=labels.index("100 SMA") + 1).column_letter if "100 SMA" in labels else None
+        sma100out_col = ws.cell(row=1, column=labels.index("100 SMA Output") + 1).column_letter if "100 SMA Output" in labels else None
 
         # NSE/TradingView/Chartlink/etc. — (url_prefix, url_suffix, link display text).
         # Verified live against each site on 2026-08-05 except Marketsmith (that
@@ -1035,6 +1092,122 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
                     ')), "TICKER NOT FOUND")'
                 )
                 formula = car_template.replace("__S__", sym_cell)
+                ws.cell(row=r, column=col, value=formula)
+
+            # ================================================================
+            # New calculated columns (instruction_word_file_for_add_column.docx)
+            # — written as real per-row formulas, same style as the blocks
+            # above. GOOGLEFINANCE()-based ones use "NSE:"&Symbol, matching
+            # every other GOOGLEFINANCE formula already in this function.
+            # ================================================================
+
+            # % from 52W High = ((CMP - 52W High) / 52W High) * 100
+            # Doc formula: =IFERROR(((E2-M2)/M2)*100,"")
+            if pct52high_col and cmp_col and high52_col_f:
+                col = labels.index("% from 52W High") + 1
+                c_, h_ = f"{cmp_col}{r}", f"{high52_col_f}{r}"
+                formula = f'=IFERROR((({c_}-{h_})/{h_})*100,"")'
+                ws.cell(row=r, column=col, value=formula)
+
+            # % from 52W Low = ((CMP - 52W Low) / 52W Low) * 100
+            # Doc formula: =IFERROR(((E2-N2)/N2)*100,"")
+            if pct52low_col and cmp_col and low52_col_f:
+                col = labels.index("% from 52W Low") + 1
+                c_, l_ = f"{cmp_col}{r}", f"{low52_col_f}{r}"
+                formula = f'=IFERROR((({c_}-{l_})/{l_})*100,"")'
+                ws.cell(row=r, column=col, value=formula)
+
+            # 20 Days Highest High — doc: "paste as it without thinking":
+            # =MAX(QUERY(SORT(GOOGLEFINANCE(A2,"high",TODAY()-40,TODAY()),1,0),"select Col2 limit 20"))
+            if d20high_col:
+                col = labels.index("20 Days Highest High") + 1
+                formula = (
+                    f'=MAX(QUERY(SORT(GOOGLEFINANCE("NSE:"&{sym_cell},"high",'
+                    f'TODAY()-40,TODAY()),1,0),"select Col2 limit 20"))'
+                )
+                ws.cell(row=r, column=col, value=formula)
+
+            # 20 Days low — doc: "paste as it without thinking":
+            # =MIN(QUERY(SORT(GOOGLEFINANCE(A2,"low",TODAY()-40,TODAY()),1,0),"select Col2 limit 20"))
+            if d20low_col:
+                col = labels.index("20 Days low") + 1
+                formula = (
+                    f'=MIN(QUERY(SORT(GOOGLEFINANCE("NSE:"&{sym_cell},"low",'
+                    f'TODAY()-40,TODAY()),1,0),"select Col2 limit 20"))'
+                )
+                ws.cell(row=r, column=col, value=formula)
+
+            # 20 Days Output = IF(20 Days low = Low (Rs.), "🟢 Start GTT order at
+            # 20 days high and update regularly", "🔴 Do not wait for best time")
+            # Doc formula: =IF((AQ2=H2),"🟢 ...","🔴 ...")
+            if d20out_col and d20low_col and low_rs_col_f:
+                col = labels.index("20 Days Output") + 1
+                aq, h_ = f"{d20low_col}{r}", f"{low_rs_col_f}{r}"
+                formula = (
+                    f'=IF(({aq}={h_}),"\U0001f7e2 Start GTT order at 20 days high '
+                    f'and update regularly","\U0001f534 Do not wait for best time")'
+                )
+                ws.cell(row=r, column=col, value=formula)
+
+            # 25 Days Low — doc: "paste as it without thinking":
+            # =MIN(QUERY(SORT(GOOGLEFINANCE(A2,"low",TODAY()-40,TODAY()),1,0),"select Col2 limit 25"))
+            if d25low_col:
+                col = labels.index("25 Days Low") + 1
+                formula = (
+                    f'=MIN(QUERY(SORT(GOOGLEFINANCE("NSE:"&{sym_cell},"low",'
+                    f'TODAY()-40,TODAY()),1,0),"select Col2 limit 25"))'
+                )
+                ws.cell(row=r, column=col, value=formula)
+
+            # Our GTT Price = 25 Days Low x 1.05 — doc formula: =AT2*1.05
+            if gtt_col and d25low_col:
+                col = labels.index("Our GTT Price") + 1
+                formula = f"={d25low_col}{r}*1.05"
+                ws.cell(row=r, column=col, value=formula)
+
+            # 25 Days Output = IF(AND(CMP < Our GTT Price, 52W High Date > 52W
+            # Low Date), "🟢 Yes, Start GTT Order", "🔴 No wait and watch")
+            # Doc formula: =IF(AND(E2<AT2, M2>O2),"🟢 ...","🔴 ...")
+            if d25out_col and cmp_col and gtt_col and high52date_col_f and low52date_col_f:
+                col = labels.index("25 Days Output") + 1
+                c_, gtt_ = f"{cmp_col}{r}", f"{gtt_col}{r}"
+                hd, ld = f"{high52date_col_f}{r}", f"{low52date_col_f}{r}"
+                formula = (
+                    f'=IF(AND({c_}<{gtt_}, {hd}>{ld}),"\U0001f7e2 Yes, Start GTT Order",'
+                    f'"\U0001f534 No wait and watch")'
+                )
+                ws.cell(row=r, column=col, value=formula)
+
+            # Last 6 Month Minimum*1.20 — doc: "paste as it without thinking":
+            # =MIN(INDEX(GOOGLEFINANCE(A2,"ALL",TODAY()-180,TODAY()),0,5))*1.2
+            if min6mo_col:
+                col = labels.index("Last 6 Month Minimum*1.20") + 1
+                formula = (
+                    f'=MIN(INDEX(GOOGLEFINANCE("NSE:"&{sym_cell},"ALL",'
+                    f'TODAY()-180,TODAY()),0,5))*1.2'
+                )
+                ws.cell(row=r, column=col, value=formula)
+
+            # 100 SMA — doc: "paste as it without thinking":
+            # =AVERAGE(QUERY(SORT(GOOGLEFINANCE(A2,"price",TODAY()-320,TODAY()),1,0),"select Col2 limit 100"))
+            if sma100_col:
+                col = labels.index("100 SMA") + 1
+                formula = (
+                    f'=AVERAGE(QUERY(SORT(GOOGLEFINANCE("NSE:"&{sym_cell},"price",'
+                    f'TODAY()-320,TODAY()),1,0),"select Col2 limit 100"))'
+                )
+                ws.cell(row=r, column=col, value=formula)
+
+            # 100 SMA Output = IF(AND(CMP > 100 SMA, CMP > Last 6 Month
+            # Minimum*1.20, Prev Close < 100 SMA), "🟢 Buy Today", "🔴 Do Not Buy")
+            # Doc formula: =IF(AND(E2>AW2, E2>AV2, J2<AW2),"🟢 ...","🔴 ...")
+            if sma100out_col and cmp_col and sma100_col and min6mo_col and prevclose_col_f:
+                col = labels.index("100 SMA Output") + 1
+                c_, aw, av, j_ = f"{cmp_col}{r}", f"{sma100_col}{r}", f"{min6mo_col}{r}", f"{prevclose_col_f}{r}"
+                formula = (
+                    f'=IF(AND({c_}>{aw}, {c_}>{av}, {j_}<{aw}),"\U0001f7e2 Buy Today",'
+                    f'"\U0001f534 Do Not Buy")'
+                )
                 ws.cell(row=r, column=col, value=formula)
 
     # ---- Native Excel hide/unhide button (feature request: "hide/unhide button
@@ -1300,6 +1473,75 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             hunt_font = Font(color="006100", bold=True)
             ws.conditional_formatting.add(
                 rng, FormulaRule(formula=[f'ISNUMBER(SEARCH("Start GTT",{first}))'], fill=hunt_fill, font=hunt_font, stopIfTrue=True)
+            )
+
+        # ================================================================
+        # Conditional formatting for the new columns (instruction_word_file_
+        # for_add_column.docx). Colors matched exactly to the "Reference:
+        # Excel Sheet" (Column_list_in_excel_file_for_add_column.xlsx):
+        #   Yellow fill = FFF2CC, Green fill (numeric) = B7E1CD,
+        #   Green fill (text outcome) = CCFFCC with text color 006100.
+        # ----------------------------------------------------------------
+
+        # ---- % from 52W High: Yellow when between 0 and 15, Green when >= 50
+        if "% from 52W High" in labels:
+            col_letter = ws.cell(row=1, column=labels.index("% from 52W High") + 1).column_letter
+            rng = f"{col_letter}2:{col_letter}{last_row}"
+            first = f"{col_letter}2"
+            pct52h_yellow_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+            pct52h_green_fill = PatternFill(start_color="B7E1CD", end_color="B7E1CD", fill_type="solid")
+            ws.conditional_formatting.add(
+                rng, FormulaRule(formula=[f'AND({first}>=0,{first}<=15)'], fill=pct52h_yellow_fill, stopIfTrue=True)
+            )
+            ws.conditional_formatting.add(
+                rng, FormulaRule(formula=[f'{first}>=50'], fill=pct52h_green_fill, stopIfTrue=True)
+            )
+
+        # ---- % from 52W Low: Green when <= -18
+        if "% from 52W Low" in labels:
+            col_letter = ws.cell(row=1, column=labels.index("% from 52W Low") + 1).column_letter
+            rng = f"{col_letter}2:{col_letter}{last_row}"
+            first = f"{col_letter}2"
+            pct52l_green_fill = PatternFill(start_color="B7E1CD", end_color="B7E1CD", fill_type="solid")
+            ws.conditional_formatting.add(
+                rng, FormulaRule(formula=[f'{first}<=-18'], fill=pct52l_green_fill, stopIfTrue=True)
+            )
+
+        # ---- 20 Days Output: green highlight for the "Start GTT order at 20
+        # days high and update regularly" outcome (no fill for the other outcome,
+        # matching the reference sheet's own rule set).
+        if "20 Days Output" in labels:
+            col_letter = ws.cell(row=1, column=labels.index("20 Days Output") + 1).column_letter
+            rng = f"{col_letter}2:{col_letter}{last_row}"
+            first = f"{col_letter}2"
+            d20_fill = PatternFill(start_color="CCFFCC", end_color="CCFFCC", fill_type="solid")
+            d20_font = Font(color="006100", bold=False)
+            ws.conditional_formatting.add(
+                rng, FormulaRule(
+                    formula=[f'ISNUMBER(SEARCH("Start GTT order at 20 days high and update regularly",{first}))'],
+                    fill=d20_fill, font=d20_font, stopIfTrue=True)
+            )
+
+        # ---- 25 Days Output: green highlight for "Yes, Start GTT Order"
+        if "25 Days Output" in labels:
+            col_letter = ws.cell(row=1, column=labels.index("25 Days Output") + 1).column_letter
+            rng = f"{col_letter}2:{col_letter}{last_row}"
+            first = f"{col_letter}2"
+            d25_fill = PatternFill(start_color="CCFFCC", end_color="CCFFCC", fill_type="solid")
+            d25_font = Font(color="006100", bold=False)
+            ws.conditional_formatting.add(
+                rng, FormulaRule(formula=[f'ISNUMBER(SEARCH("Yes, Start GTT Order",{first}))'], fill=d25_fill, font=d25_font, stopIfTrue=True)
+            )
+
+        # ---- 100 SMA Output: green highlight for "Buy Today"
+        if "100 SMA Output" in labels:
+            col_letter = ws.cell(row=1, column=labels.index("100 SMA Output") + 1).column_letter
+            rng = f"{col_letter}2:{col_letter}{last_row}"
+            first = f"{col_letter}2"
+            sma_fill = PatternFill(start_color="CCFFCC", end_color="CCFFCC", fill_type="solid")
+            sma_font = Font(color="006100", bold=False)
+            ws.conditional_formatting.add(
+                rng, FormulaRule(formula=[f'ISNUMBER(SEARCH("Buy Today",{first}))'], fill=sma_fill, font=sma_font, stopIfTrue=True)
             )
 
 
