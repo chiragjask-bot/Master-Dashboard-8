@@ -2126,13 +2126,21 @@ DEFAULT_URLS = [
     "https://www.nseindia.com/market-data/live-equity-market",
     "https://www.nseindia.com/market-data/pre-open-market-cm-and-emerge-market",
     "https://innovacia.in/?s=",
+    "https://www.nseindia.com/market-data/stocks-traded#",
+    "https://www.nseindia.com/market-data/advance#",
+    "https://www.nseindia.com/market-data/decline#",
+    "https://www.nseindia.com/market-data/unchanged#",
+    "https://www.nseindia.com/market-data/large-deals#",
+    "https://www.nseindia.com/market-data/top-gainers-losers#",
+    "https://www.nseindia.com/market-data/most-active-equities#",
     "https://www.nseindia.com/resources/exchange-communication-press-releases",
     "https://www.nseindia.com/resources/exchange-communication-circulars",
     "https://www.nseindia.com/companies-listing/corporate-filings-voting-results",
     "https://www.nseindia.com/companies-listing/corporate-filings-postal-ballot",
     "https://www.nseindia.com/companies-listing/corporate-filings-unitholding-pattern",
     "https://www.nseindia.com/companies-listing/corporate-filings-shareholding-pattern",
-    "https://www.nseindia.com/static/market-data/market-timings"
+    "https://www.nseindia.com/static/market-data/market-timings",
+    "https://www.nseindia.com/market-data/index-performances"
 ]
 
 if "custom_urls" not in st.session_state:
