@@ -7,7 +7,7 @@ import os
 import random
 import zipfile
 import gzip
-from datetime import datetime
+from datetime import datetime, timedelta
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.worksheet.datavalidation import DataValidation
@@ -509,23 +509,23 @@ MASTER_FIELD_MAP = [
     {"label": "Bull/Bear Run Output", "sheet": None, "aliases": [], "format": "text"},
 
     # ---- New calculated columns (feature request: "Create New Column Name: 52W
-    # Local" and "Bottom Hunting Column"), placed between Bull/Bear Run Output and
+    # Local" and "52W Low Bottom Hunting"), placed between Bull/Bear Run Output and
     # Trading View. Both are written as real, per-row Excel formulas (not Python-
     # computed values) so they behave like a normal dragged-down formula — see the
-    # "52W Local" / "Bottom Hunting Column" block in md_write_master_sheet().
+    # "52W Local" / "52W Low Bottom Hunting" block in md_write_master_sheet().
     #   52W Local             = 52W Low * 1.2
-    #   Bottom Hunting Column = IF(AND(52W Low Date > 52W High Date,
+    #   52W Low Bottom Hunting = IF(AND(52W Low Date > 52W High Date,
     #                                  52W Local > CMP/LTP,
     #                                  (52W Local - CMP/LTP)*100/CMP/LTP < 10),
     #                              "🟢 Start GTT", "🔴 Wait for Bottom Out")
     {"label": "52W Local", "sheet": None, "aliases": [], "format": "price"},
-    {"label": "Bottom Hunting Column", "sheet": None, "aliases": [], "format": "text"},
+    {"label": "52W Low Bottom Hunting", "sheet": None, "aliases": [], "format": "text"},
 
     # ---- New calculated columns (feature request: instruction_word_file_for_
     # add_column.docx — "Create New Column Name" list, default placement
-    # "between Bottom Hunting Column and Trading View"). All 11 are written as
+    # "between 52W Low Bottom Hunting and Trading View"). All 11 are written as
     # real, per-row Excel/Google Sheets formulas (not Python-computed values),
-    # exactly like the DMA/52W Local/Bottom Hunting Column block above — see
+    # exactly like the DMA/52W Local/52W Low Bottom Hunting block above — see
     # the matching block in md_write_master_sheet(). GOOGLEFINANCE()-based
     # formulas (20/25 Days Highest/Low, Last 6 Month Minimum, 100 SMA) are
     # Google Sheets only, same caveat as the DMA columns.
@@ -769,6 +769,146 @@ def md_match_column(header_index: dict, aliases: list) -> int:
     return -1
 
 
+# =====================================================================================
+# 2b-2. Fast Python-computed price-history columns (feature request: "loading
+#       time a lot in google sheet to run formula for GOOGLEFINANCE related
+#       formula ... any option available to quick execute GOOGLEFINANCE formula
+#       in streamlit software"). GOOGLEFINANCE() only runs inside Google Sheets
+#       itself and re-fetches on every open/edit — that live recalculation
+#       across thousands of rows is what causes the slow load. The functions
+#       below fetch each symbol's price history ONCE via yfinance (a single
+#       network round-trip per symbol, cached) and compute every
+#       GOOGLEFINANCE-derived value in Python, so the resulting cells can be
+#       written as plain numbers/text instead of live formulas — the file then
+#       opens instantly in both Excel and Google Sheets, with no recalculation
+#       at all. This is opt-in (see the "⚡ fast Python price calc" toggle in
+#       the UI) and fails soft: if yfinance isn't installed, or a symbol's
+#       fetch fails, that field is simply left uncomputed and
+#       md_write_master_sheet() falls back to its original GOOGLEFINANCE
+#       formula for that cell — nothing else changes.
+#       Requires the "yfinance" package (pip install yfinance).
+# =====================================================================================
+try:
+    import yfinance as yf
+except ImportError:
+    yf = None
+
+PRICE_HISTORY_LOOKBACK_DAYS = 400  # covers 200 DMA / 1-year-high lookups with margin
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def fetch_nse_price_history(symbol: str):
+    """Fetches ~400 calendar days of daily OHLC history for one NSE symbol via
+    yfinance (symbol + '.NS'). Cached per symbol for 1 hour, so re-running the
+    app (or generating more than one file in the same session) doesn't
+    re-fetch. Returns a pandas DataFrame (Date index, Open/High/Low/Close/
+    Volume columns) or None if yfinance is unavailable, the symbol is blank,
+    or the fetch failed / returned no data."""
+    if yf is None or not symbol or not str(symbol).strip():
+        return None
+    try:
+        end = datetime.now()
+        start = end - timedelta(days=PRICE_HISTORY_LOOKBACK_DAYS)
+        ticker = yf.Ticker(f"{str(symbol).strip().upper()}.NS")
+        hist = ticker.history(start=start, end=end, interval="1d")
+        if hist is None or hist.empty:
+            return None
+        return hist
+    except Exception:
+        return None
+
+
+def compute_price_history_fields(symbol: str) -> dict:
+    """Computes every GOOGLEFINANCE-derived Master_Dashboard-8 numeric field
+    from ONE fetched price history (instead of one GOOGLEFINANCE() call per
+    column), so each symbol only needs a single network round-trip. Returns a
+    dict of {field_label: value}; any field that can't be computed (missing/
+    too-short history) is simply left out of the dict, so the caller falls
+    back to the original live formula for that cell."""
+    hist = fetch_nse_price_history(symbol)
+    if hist is None or hist.empty:
+        return {}
+
+    result = {}
+    closes = hist["Close"].dropna() if "Close" in hist else pd.Series(dtype=float)
+    highs = hist["High"].dropna() if "High" in hist else pd.Series(dtype=float)
+    lows = hist["Low"].dropna() if "Low" in hist else pd.Series(dtype=float)
+
+    if len(highs) >= 1:
+        result["20 Days Highest High"] = round(float(highs.tail(20).max()), 2)
+    if len(lows) >= 1:
+        result["20 Days low"] = round(float(lows.tail(20).min()), 2)
+        result["25 Days Low"] = round(float(lows.tail(25).min()), 2)
+    if len(closes) >= 1:
+        result["50 DMA"] = round(float(closes.tail(50).mean()), 2)
+        result["100 DMA"] = round(float(closes.tail(100).mean()), 2)
+        result["200 DMA"] = round(float(closes.tail(200).mean()), 2)
+        result["100 SMA"] = round(float(closes.tail(100).mean()), 2)
+
+        # Last 6 Month Minimum*1.20 — lowest close over the last 180 calendar
+        # days (matching GOOGLEFINANCE(...,"ALL",TODAY()-180,TODAY())), x 1.2.
+        six_month_cutoff = hist.index.max() - pd.Timedelta(days=180)
+        six_month_closes = closes[closes.index >= six_month_cutoff]
+        if len(six_month_closes) >= 1:
+            result["Last 6 Month Minimum*1.20"] = round(float(six_month_closes.min()) * 1.2, 2)
+
+    return result
+
+
+def compute_car_rating(symbol: str):
+    """Python port of the CAR Rating LET()/SCAN()/CHOOSEROWS() formula (Google
+    Sheets-only functions) from the same fetched price history: finds the
+    1-year high date, then checks whether the cumulative-average close since
+    that high has been rising for the last 9 day-over-day comparisons (10
+    points). Returns the rating string, or None if it can't be computed
+    (caller falls back to the original formula for that cell)."""
+    hist = fetch_nse_price_history(symbol)
+    if hist is None or hist.empty or "Close" not in hist or "High" not in hist:
+        return None
+    closes = hist["Close"].dropna()
+    highs = hist["High"].dropna()
+    if closes.empty or highs.empty:
+        return None
+
+    high_date = highs.idxmax()
+    prices = closes[closes.index >= high_date]
+    if prices.empty:
+        prices = closes.tail(10)  # matches the formula's own TODAY()-10 fallback
+
+    count_rows = len(prices)
+    if count_rows < 10:
+        return "\u26aa Short History"
+
+    cum_avg = prices.expanding().mean().tail(10).to_numpy()
+    check = sum(1 for i in range(1, 10) if cum_avg[i] > cum_avg[i - 1])
+    if check == 9:
+        return "\U0001f7e2 Buy/Average Out"
+    return "Avoid/Hold \U0001f534"
+
+
+def build_price_calc_cache(symbols, progress_label="Fetching price history..."):
+    """Runs compute_price_history_fields()/compute_car_rating() once per
+    unique symbol (skipping blanks), shows a Streamlit progress bar, and
+    returns {symbol: {field_label: value}}. Used to populate the
+    precomputed_price_fields argument of md_write_master_sheet()."""
+    unique_symbols = sorted({str(s).strip() for s in symbols if s and str(s).strip()})
+    cache = {}
+    if not unique_symbols:
+        return cache
+    progress = st.progress(0.0, text=progress_label)
+    total = len(unique_symbols)
+    for i, sym in enumerate(unique_symbols):
+        fields = compute_price_history_fields(sym)
+        car = compute_car_rating(sym)
+        if car is not None:
+            fields["CAR Rating"] = car
+        if fields:
+            cache[sym] = fields
+        progress.progress((i + 1) / total, text=f"{progress_label} ({i + 1}/{total})")
+    progress.empty()
+    return cache
+
+
 def md_build_master_dashboard(wb, field_map=None):
     """wb is an openpyxl Workbook already holding the freshly consolidated tabs
     (values, not formulas — safe to read cell.value directly, no data_only reload needed).
@@ -838,7 +978,8 @@ def md_build_master_dashboard(wb, field_map=None):
     return df, log
 
 
-def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_columns=None):
+def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_columns=None,
+                           precomputed_price_fields=None):
     """Adds/overwrites Master_Dashboard-8 directly on the same workbook object.
     column_order: optional list of field labels (subset/reordered) controlling
     which columns appear and in what order. Defaults to the full field_map.
@@ -846,7 +987,16 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
     get_active_master_field_map() to include any custom columns the user has added.
     hide_columns: optional iterable of field labels to hide (openpyxl column
     'hidden' flag) on this sheet — pass MASTER_HIDE_COLUMNS when the "hide
-    columns" toggle is on, or None/[] to leave every column visible."""
+    columns" toggle is on, or None/[] to leave every column visible.
+    precomputed_price_fields: optional {symbol: {field_label: value}} dict (see
+    build_price_calc_cache()) — for any GOOGLEFINANCE-derived cell (50/100/200
+    DMA, CAR Rating, 20 Days Highest High, 20 Days low, 25 Days Low, Last 6
+    Month Minimum*1.20, 100 SMA) where this row's symbol has a precomputed
+    value, that plain value is written instead of the live GOOGLEFINANCE
+    formula — much faster to open, and works in Excel too. Any symbol/field
+    missing from this dict falls back to the original formula exactly as
+    before. Pass None (default) to keep every one of these as a live formula,
+    unchanged from prior behavior."""
     field_map = field_map if field_map is not None else MASTER_FIELD_MAP
     hide_set = {md_normalize_header(h) for h in (hide_columns or [])}
     if MASTER_SHEET_NAME in wb.sheetnames:
@@ -910,6 +1060,8 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
         high52_col_f = ws.cell(row=1, column=labels.index("52W High") + 1).column_letter if "52W High" in labels else None
         low_rs_col_f = ws.cell(row=1, column=labels.index("Low (Rs.)") + 1).column_letter if "Low (Rs.)" in labels else None
         prevclose_col_f = ws.cell(row=1, column=labels.index("Prev Close") + 1).column_letter if "Prev Close" in labels else None
+        symbol_col_idx_for_price = labels.index("Symbol") + 1
+        price_cache = precomputed_price_fields or {}
 
         # ---- New calculated columns (instruction_word_file_for_add_column.docx)
         # — column-letter lookups for each new column's OWN cell, so formulas
@@ -987,6 +1139,8 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
 
         for r in range(2, len(df) + 2):
             sym_cell = f"{sym_col}{r}"
+            row_symbol_value = ws.cell(row=r, column=symbol_col_idx_for_price).value
+            row_price_fields = price_cache.get(str(row_symbol_value).strip(), {}) if row_symbol_value else {}
 
             for label, (
                 prefix,
@@ -1019,11 +1173,14 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             for label, days, lookback in (("50 DMA", 50, 75), ("100 DMA", 100, 150), ("200 DMA", 200, 300)):
                 if label in labels:
                     col = labels.index(label) + 1
-                    formula = (
-                        f'=IFERROR(AVERAGE(QUERY(SORT(GOOGLEFINANCE("NSE:"&{sym_cell},"price",'
-                        f'TODAY()-{lookback},TODAY()),1,0),"select Col2 limit {days}")), "")'
-                    )
-                    ws.cell(row=r, column=col, value=formula)
+                    if label in row_price_fields:
+                        ws.cell(row=r, column=col, value=row_price_fields[label])
+                    else:
+                        formula = (
+                            f'=IFERROR(AVERAGE(QUERY(SORT(GOOGLEFINANCE("NSE:"&{sym_cell},"price",'
+                            f'TODAY()-{lookback},TODAY()),1,0),"select Col2 limit {days}")), "")'
+                        )
+                        ws.cell(row=r, column=col, value=formula)
 
             if "Bull/Bear Run Output" in labels and cmp_col and d50_col and d100_col and d200_col:
                 col = labels.index("Bull/Bear Run Output") + 1
@@ -1043,12 +1200,12 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
                 formula = f"={low52_col_f}{r}*1.2"
                 ws.cell(row=r, column=col, value=formula)
 
-            # Bottom Hunting Column (feature request formula):
+            # 52W Low Bottom Hunting (feature request formula):
             # =IF(AND((52W Low Date>52W High Date),(52W Local>CMP),
             #         ((52W Local-CMP)*100/CMP)<10),"🟢 Start GTT","🔴 Wait for Bottom Out")
-            if ("Bottom Hunting Column" in labels and local52_col_f and cmp_col
+            if ("52W Low Bottom Hunting" in labels and local52_col_f and cmp_col
                     and low52date_col_f and high52date_col_f):
-                col = labels.index("Bottom Hunting Column") + 1
+                col = labels.index("52W Low Bottom Hunting") + 1
                 aa, s = f"{local52_col_f}{r}", f"{cmp_col}{r}"
                 z, x = f"{low52date_col_f}{r}", f"{high52date_col_f}{r}"
                 formula = (
@@ -1072,27 +1229,30 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             # not classic Excel). Symbol cell substituted in for every "A2".
             if "CAR Rating" in labels:
                 col = labels.index("CAR Rating") + 1
-                car_template = (
-                    '=IFERROR(IF(__S__="","ENTER STOCK",'
-                    'LET('
-                    'raw_high, GOOGLEFINANCE("NSE:" & __S__, "high", TODAY()-365, TODAY()),'
-                    'high_date, IFERROR(TO_DATE(QUERY(raw_high, "SELECT Col1 WHERE Col2 IS NOT NULL '
-                    'ORDER BY Col2 DESC LIMIT 1 LABEL Col1 \'\'", 1)), TODAY()-30),'
-                    'raw_data, IFERROR(GOOGLEFINANCE("NSE:" & __S__, "close", high_date, TODAY()), '
-                    'GOOGLEFINANCE("NSE:" & __S__, "close", TODAY()-10, TODAY())),'
-                    'prices, IFERROR(CHOOSEROWS(INDEX(raw_data, 0, 2), SEQUENCE(ROWS(raw_data)-1, 1, 2, 1)), {0}),'
-                    'count_rows, ROWS(prices),'
-                    'cum_avg, SCAN(0, SEQUENCE(count_rows), LAMBDA(a,n, AVERAGE(CHOOSEROWS(prices, SEQUENCE(n))))),'
-                    'last_10, IF(count_rows < 10, {0;0;0;0;0;0;0;0;0;0}, '
-                    'CHOOSEROWS(cum_avg, SEQUENCE(10, 1, count_rows - 9, 1))),'
-                    'check, SUMPRODUCT(--(CHOOSEROWS(last_10, SEQUENCE(9, 1, 2, 1)) > '
-                    'CHOOSEROWS(last_10, SEQUENCE(9, 1, 1, 1)))),'
-                    'IF(count_rows < 10, "\u26aa Short History", IF(check = 9, '
-                    '"\U0001f7e2 Buy/Average Out", "Avoid/Hold \U0001f534"))'
-                    ')), "TICKER NOT FOUND")'
-                )
-                formula = car_template.replace("__S__", sym_cell)
-                ws.cell(row=r, column=col, value=formula)
+                if "CAR Rating" in row_price_fields:
+                    ws.cell(row=r, column=col, value=row_price_fields["CAR Rating"])
+                else:
+                    car_template = (
+                        '=IFERROR(IF(__S__="","ENTER STOCK",'
+                        'LET('
+                        'raw_high, GOOGLEFINANCE("NSE:" & __S__, "high", TODAY()-365, TODAY()),'
+                        'high_date, IFERROR(TO_DATE(QUERY(raw_high, "SELECT Col1 WHERE Col2 IS NOT NULL '
+                        'ORDER BY Col2 DESC LIMIT 1 LABEL Col1 \'\'", 1)), TODAY()-30),'
+                        'raw_data, IFERROR(GOOGLEFINANCE("NSE:" & __S__, "close", high_date, TODAY()), '
+                        'GOOGLEFINANCE("NSE:" & __S__, "close", TODAY()-10, TODAY())),'
+                        'prices, IFERROR(CHOOSEROWS(INDEX(raw_data, 0, 2), SEQUENCE(ROWS(raw_data)-1, 1, 2, 1)), {0}),'
+                        'count_rows, ROWS(prices),'
+                        'cum_avg, SCAN(0, SEQUENCE(count_rows), LAMBDA(a,n, AVERAGE(CHOOSEROWS(prices, SEQUENCE(n))))),'
+                        'last_10, IF(count_rows < 10, {0;0;0;0;0;0;0;0;0;0}, '
+                        'CHOOSEROWS(cum_avg, SEQUENCE(10, 1, count_rows - 9, 1))),'
+                        'check, SUMPRODUCT(--(CHOOSEROWS(last_10, SEQUENCE(9, 1, 2, 1)) > '
+                        'CHOOSEROWS(last_10, SEQUENCE(9, 1, 1, 1)))),'
+                        'IF(count_rows < 10, "\u26aa Short History", IF(check = 9, '
+                        '"\U0001f7e2 Buy/Average Out", "Avoid/Hold \U0001f534"))'
+                        ')), "TICKER NOT FOUND")'
+                    )
+                    formula = car_template.replace("__S__", sym_cell)
+                    ws.cell(row=r, column=col, value=formula)
 
             # ================================================================
             # New calculated columns (instruction_word_file_for_add_column.docx)
@@ -1462,11 +1622,11 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
                 rng, FormulaRule(formula=[f'ISNUMBER(SEARCH("Avoid/Hold",{first}))'], fill=car_avoid_fill, font=car_avoid_font, stopIfTrue=True)
             )
 
-        # ---- Conditional formatting: Bottom Hunting Column — bold green for
+        # ---- Conditional formatting: 52W Low Bottom Hunting — bold green for
         # "Start GTT", plain/uncoloured for "Wait for Bottom Out" (no red used
         # here, matching the reference colour sheet).
-        if "Bottom Hunting Column" in labels:
-            col_letter = ws.cell(row=1, column=labels.index("Bottom Hunting Column") + 1).column_letter
+        if "52W Low Bottom Hunting" in labels:
+            col_letter = ws.cell(row=1, column=labels.index("52W Low Bottom Hunting") + 1).column_letter
             rng = f"{col_letter}2:{col_letter}{last_row}"
             first = f"{col_letter}2"
             hunt_fill = PatternFill(start_color="CCFFCC", end_color="CCFFCC", fill_type="solid")
@@ -2126,21 +2286,13 @@ DEFAULT_URLS = [
     "https://www.nseindia.com/market-data/live-equity-market",
     "https://www.nseindia.com/market-data/pre-open-market-cm-and-emerge-market",
     "https://innovacia.in/?s=",
-    "https://www.nseindia.com/market-data/stocks-traded#",
-    "https://www.nseindia.com/market-data/advance#",
-    "https://www.nseindia.com/market-data/decline#",
-    "https://www.nseindia.com/market-data/unchanged#",
-    "https://www.nseindia.com/market-data/large-deals#",
-    "https://www.nseindia.com/market-data/top-gainers-losers#",
-    "https://www.nseindia.com/market-data/most-active-equities#",
     "https://www.nseindia.com/resources/exchange-communication-press-releases",
     "https://www.nseindia.com/resources/exchange-communication-circulars",
     "https://www.nseindia.com/companies-listing/corporate-filings-voting-results",
     "https://www.nseindia.com/companies-listing/corporate-filings-postal-ballot",
     "https://www.nseindia.com/companies-listing/corporate-filings-unitholding-pattern",
     "https://www.nseindia.com/companies-listing/corporate-filings-shareholding-pattern",
-    "https://www.nseindia.com/static/market-data/market-timings",
-    "https://www.nseindia.com/market-data/index-performances"
+    "https://www.nseindia.com/static/market-data/market-timings"
 ]
 
 if "custom_urls" not in st.session_state:
