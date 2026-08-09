@@ -7,12 +7,23 @@ import os
 import random
 import zipfile
 import gzip
-from datetime import datetime, timedelta
+from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.comments import Comment
 from openpyxl.formatting.rule import FormulaRule
+
+# Optional dependency for fast, local computation of the 20/25 Days & 100 SMA /
+# Last 6 Month Minimum columns (see fetch_new_columns_price_data() below) —
+# replaces the GOOGLEFINANCE-formula approach, which only runs (slowly) inside
+# Google Sheets itself. Not installed? Those 5 columns are simply left blank
+# and a warning is shown — everything else in the app still works.
+try:
+    import yfinance as yf
+    YFINANCE_AVAILABLE = True
+except ImportError:
+    YFINANCE_AVAILABLE = False
 
 # =====================================================================================
 # 0. LOGIN GATE  (keeps the app private without ever putting a password on GitHub)
@@ -770,143 +781,81 @@ def md_match_column(header_index: dict, aliases: list) -> int:
 
 
 # =====================================================================================
-# 2b-2. Fast Python-computed price-history columns (feature request: "loading
-#       time a lot in google sheet to run formula for GOOGLEFINANCE related
-#       formula ... any option available to quick execute GOOGLEFINANCE formula
-#       in streamlit software"). GOOGLEFINANCE() only runs inside Google Sheets
-#       itself and re-fetches on every open/edit — that live recalculation
-#       across thousands of rows is what causes the slow load. The functions
-#       below fetch each symbol's price history ONCE via yfinance (a single
-#       network round-trip per symbol, cached) and compute every
-#       GOOGLEFINANCE-derived value in Python, so the resulting cells can be
-#       written as plain numbers/text instead of live formulas — the file then
-#       opens instantly in both Excel and Google Sheets, with no recalculation
-#       at all. This is opt-in (see the "⚡ fast Python price calc" toggle in
-#       the UI) and fails soft: if yfinance isn't installed, or a symbol's
-#       fetch fails, that field is simply left uncomputed and
-#       md_write_master_sheet() falls back to its original GOOGLEFINANCE
-#       formula for that cell — nothing else changes.
-#       Requires the "yfinance" package (pip install yfinance).
+# 2c. Fast local computation for the GOOGLEFINANCE-based new columns (feature
+#     request: "loading time a lot in google sheet to run formula for
+#     GOOGLEFINANCE related formula ... any option available to quick execute").
+#     GOOGLEFINANCE only exists inside Google Sheets itself — there is no way
+#     for Python/Streamlit to "run" that function, and recalculating it live
+#     per-row across thousands of rows is exactly what causes the slowdown.
+#     This replaces the 5 GOOGLEFINANCE-based columns (20 Days Highest High,
+#     20 Days low, 25 Days Low, 100 SMA, Last 6 Month Minimum*1.20) with
+#     values computed ONCE here in Python — via yfinance, NSE symbol + ".NS" —
+#     and written into the sheet as plain numbers instead of live formulas. The
+#     sheet then opens instantly with nothing left to recalculate for these.
+#     The columns that only IF/compare against these numbers (20 Days Output,
+#     Our GTT Price, 25 Days Output, 100 SMA Output) are UNCHANGED — they stay
+#     real Excel formulas, and since they no longer point at a GOOGLEFINANCE
+#     cell they're already fast in both Excel and Google Sheets.
+#     NOT touched: 50/100/200 DMA, CAR Rating, Bull/Bear Run Output — those
+#     still use GOOGLEFINANCE exactly as before (out of scope of this request).
 # =====================================================================================
-try:
-    import yfinance as yf
-except ImportError:
-    yf = None
-
-PRICE_HISTORY_LOOKBACK_DAYS = 400  # covers 200 DMA / 1-year-high lookups with margin
+NEW_COLS_PRICE_PERIOD = "400d"  # yfinance lookback window — wide enough for the
+                                 # 100 SMA plus weekends/holidays, and covers the
+                                 # 180-calendar-day window for Last 6 Month Minimum.
 
 
-@st.cache_data(show_spinner=False, ttl=3600)
-def fetch_nse_price_history(symbol: str):
-    """Fetches ~400 calendar days of daily OHLC history for one NSE symbol via
-    yfinance (symbol + '.NS'). Cached per symbol for 1 hour, so re-running the
-    app (or generating more than one file in the same session) doesn't
-    re-fetch. Returns a pandas DataFrame (Date index, Open/High/Low/Close/
-    Volume columns) or None if yfinance is unavailable, the symbol is blank,
-    or the fetch failed / returned no data."""
-    if yf is None or not symbol or not str(symbol).strip():
-        return None
-    try:
-        end = datetime.now()
-        start = end - timedelta(days=PRICE_HISTORY_LOOKBACK_DAYS)
-        ticker = yf.Ticker(f"{str(symbol).strip().upper()}.NS")
-        hist = ticker.history(start=start, end=end, interval="1d")
-        if hist is None or hist.empty:
-            return None
-        return hist
-    except Exception:
-        return None
-
-
-def compute_price_history_fields(symbol: str) -> dict:
-    """Computes every GOOGLEFINANCE-derived Master_Dashboard-8 numeric field
-    from ONE fetched price history (instead of one GOOGLEFINANCE() call per
-    column), so each symbol only needs a single network round-trip. Returns a
-    dict of {field_label: value}; any field that can't be computed (missing/
-    too-short history) is simply left out of the dict, so the caller falls
-    back to the original live formula for that cell."""
-    hist = fetch_nse_price_history(symbol)
-    if hist is None or hist.empty:
-        return {}
-
+@st.cache_data(ttl=900, show_spinner="Fetching live price history for the new columns...")
+def fetch_new_columns_price_data(symbols: tuple) -> dict:
+    """Bulk-fetches OHLC history for every symbol ONCE (single yfinance batch
+    call, NSE ".NS" suffix) and returns:
+        {symbol: {"20d_high": .., "20d_low": .., "25d_low": .., "sma100": ..,
+                   "min6mo": ..}}
+    A symbol that fails to fetch (delisted / not on Yahoo Finance / network
+    issue) is simply absent from the result — callers leave that cell blank
+    instead of erroring. Cached for 15 minutes so repeated reruns/exports in
+    the same session don't re-hit the network for an unchanged symbol list."""
     result = {}
-    closes = hist["Close"].dropna() if "Close" in hist else pd.Series(dtype=float)
-    highs = hist["High"].dropna() if "High" in hist else pd.Series(dtype=float)
-    lows = hist["Low"].dropna() if "Low" in hist else pd.Series(dtype=float)
+    if not YFINANCE_AVAILABLE or not symbols:
+        return result
 
-    if len(highs) >= 1:
-        result["20 Days Highest High"] = round(float(highs.tail(20).max()), 2)
-    if len(lows) >= 1:
-        result["20 Days low"] = round(float(lows.tail(20).min()), 2)
-        result["25 Days Low"] = round(float(lows.tail(25).min()), 2)
-    if len(closes) >= 1:
-        result["50 DMA"] = round(float(closes.tail(50).mean()), 2)
-        result["100 DMA"] = round(float(closes.tail(100).mean()), 2)
-        result["200 DMA"] = round(float(closes.tail(200).mean()), 2)
-        result["100 SMA"] = round(float(closes.tail(100).mean()), 2)
+    tickers = [f"{s}.NS" for s in symbols]
+    try:
+        data = yf.download(
+            tickers=tickers, period=NEW_COLS_PRICE_PERIOD, interval="1d",
+            group_by="ticker", threads=True, progress=False, auto_adjust=False,
+        )
+    except Exception:
+        return result
 
-        # Last 6 Month Minimum*1.20 — lowest close over the last 180 calendar
-        # days (matching GOOGLEFINANCE(...,"ALL",TODAY()-180,TODAY())), x 1.2.
-        six_month_cutoff = hist.index.max() - pd.Timedelta(days=180)
-        six_month_closes = closes[closes.index >= six_month_cutoff]
-        if len(six_month_closes) >= 1:
-            result["Last 6 Month Minimum*1.20"] = round(float(six_month_closes.min()) * 1.2, 2)
+    six_months_ago_cutoff = pd.Timedelta(days=180)
+    for sym, ticker in zip(symbols, tickers):
+        try:
+            if len(tickers) == 1:
+                hist = data
+            else:
+                if ticker not in data.columns.get_level_values(0):
+                    continue
+                hist = data[ticker]
+            hist = hist.dropna(subset=["Close"])
+            if hist.empty:
+                continue
+
+            last20 = hist.tail(20)
+            last25 = hist.tail(25)
+            last100 = hist.tail(100)
+            last6mo = hist[hist.index >= (hist.index.max() - six_months_ago_cutoff)]
+
+            result[sym] = {
+                "20d_high": float(last20["High"].max()) if not last20.empty else None,
+                "20d_low": float(last20["Low"].min()) if not last20.empty else None,
+                "25d_low": float(last25["Low"].min()) if not last25.empty else None,
+                "sma100": float(last100["Close"].mean()) if not last100.empty else None,
+                "min6mo": float(last6mo["Close"].min()) * 1.2 if not last6mo.empty else None,
+            }
+        except Exception:
+            continue
 
     return result
-
-
-def compute_car_rating(symbol: str):
-    """Python port of the CAR Rating LET()/SCAN()/CHOOSEROWS() formula (Google
-    Sheets-only functions) from the same fetched price history: finds the
-    1-year high date, then checks whether the cumulative-average close since
-    that high has been rising for the last 9 day-over-day comparisons (10
-    points). Returns the rating string, or None if it can't be computed
-    (caller falls back to the original formula for that cell)."""
-    hist = fetch_nse_price_history(symbol)
-    if hist is None or hist.empty or "Close" not in hist or "High" not in hist:
-        return None
-    closes = hist["Close"].dropna()
-    highs = hist["High"].dropna()
-    if closes.empty or highs.empty:
-        return None
-
-    high_date = highs.idxmax()
-    prices = closes[closes.index >= high_date]
-    if prices.empty:
-        prices = closes.tail(10)  # matches the formula's own TODAY()-10 fallback
-
-    count_rows = len(prices)
-    if count_rows < 10:
-        return "\u26aa Short History"
-
-    cum_avg = prices.expanding().mean().tail(10).to_numpy()
-    check = sum(1 for i in range(1, 10) if cum_avg[i] > cum_avg[i - 1])
-    if check == 9:
-        return "\U0001f7e2 Buy/Average Out"
-    return "Avoid/Hold \U0001f534"
-
-
-def build_price_calc_cache(symbols, progress_label="Fetching price history..."):
-    """Runs compute_price_history_fields()/compute_car_rating() once per
-    unique symbol (skipping blanks), shows a Streamlit progress bar, and
-    returns {symbol: {field_label: value}}. Used to populate the
-    precomputed_price_fields argument of md_write_master_sheet()."""
-    unique_symbols = sorted({str(s).strip() for s in symbols if s and str(s).strip()})
-    cache = {}
-    if not unique_symbols:
-        return cache
-    progress = st.progress(0.0, text=progress_label)
-    total = len(unique_symbols)
-    for i, sym in enumerate(unique_symbols):
-        fields = compute_price_history_fields(sym)
-        car = compute_car_rating(sym)
-        if car is not None:
-            fields["CAR Rating"] = car
-        if fields:
-            cache[sym] = fields
-        progress.progress((i + 1) / total, text=f"{progress_label} ({i + 1}/{total})")
-    progress.empty()
-    return cache
 
 
 def md_build_master_dashboard(wb, field_map=None):
@@ -979,7 +928,7 @@ def md_build_master_dashboard(wb, field_map=None):
 
 
 def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_columns=None,
-                           precomputed_price_fields=None):
+                           precomputed_price_data=None):
     """Adds/overwrites Master_Dashboard-8 directly on the same workbook object.
     column_order: optional list of field labels (subset/reordered) controlling
     which columns appear and in what order. Defaults to the full field_map.
@@ -988,15 +937,15 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
     hide_columns: optional iterable of field labels to hide (openpyxl column
     'hidden' flag) on this sheet — pass MASTER_HIDE_COLUMNS when the "hide
     columns" toggle is on, or None/[] to leave every column visible.
-    precomputed_price_fields: optional {symbol: {field_label: value}} dict (see
-    build_price_calc_cache()) — for any GOOGLEFINANCE-derived cell (50/100/200
-    DMA, CAR Rating, 20 Days Highest High, 20 Days low, 25 Days Low, Last 6
-    Month Minimum*1.20, 100 SMA) where this row's symbol has a precomputed
-    value, that plain value is written instead of the live GOOGLEFINANCE
-    formula — much faster to open, and works in Excel too. Any symbol/field
-    missing from this dict falls back to the original formula exactly as
-    before. Pass None (default) to keep every one of these as a live formula,
-    unchanged from prior behavior."""
+    precomputed_price_data: optional {symbol: {"20d_high":.., "20d_low":..,
+    "25d_low":.., "sma100":.., "min6mo":..}} dict from
+    fetch_new_columns_price_data() — when a symbol/field is present, that
+    plain Python-computed value is written instead of a live GOOGLEFINANCE
+    formula for the 5 GOOGLEFINANCE-based new columns (20 Days Highest High,
+    20 Days low, 25 Days Low, 100 SMA, Last 6 Month Minimum*1.20). A symbol
+    missing from this dict (or the dict itself being None/empty) falls back
+    to the original live GOOGLEFINANCE formula for that cell exactly as
+    before — nothing else changes."""
     field_map = field_map if field_map is not None else MASTER_FIELD_MAP
     hide_set = {md_normalize_header(h) for h in (hide_columns or [])}
     if MASTER_SHEET_NAME in wb.sheetnames:
@@ -1060,8 +1009,6 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
         high52_col_f = ws.cell(row=1, column=labels.index("52W High") + 1).column_letter if "52W High" in labels else None
         low_rs_col_f = ws.cell(row=1, column=labels.index("Low (Rs.)") + 1).column_letter if "Low (Rs.)" in labels else None
         prevclose_col_f = ws.cell(row=1, column=labels.index("Prev Close") + 1).column_letter if "Prev Close" in labels else None
-        symbol_col_idx_for_price = labels.index("Symbol") + 1
-        price_cache = precomputed_price_fields or {}
 
         # ---- New calculated columns (instruction_word_file_for_add_column.docx)
         # — column-letter lookups for each new column's OWN cell, so formulas
@@ -1079,6 +1026,10 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
         min6mo_col = ws.cell(row=1, column=labels.index("Last 6 Month Minimum*1.20") + 1).column_letter if "Last 6 Month Minimum*1.20" in labels else None
         sma100_col = ws.cell(row=1, column=labels.index("100 SMA") + 1).column_letter if "100 SMA" in labels else None
         sma100out_col = ws.cell(row=1, column=labels.index("100 SMA Output") + 1).column_letter if "100 SMA Output" in labels else None
+
+        # price_cache: {symbol: {"20d_high":.., ...}} from fetch_new_columns_price_data(),
+        # keyed by the row's own Symbol value (see symbol_value below).
+        price_cache = precomputed_price_data or {}
 
         # NSE/TradingView/Chartlink/etc. — (url_prefix, url_suffix, link display text).
         # Verified live against each site on 2026-08-05 except Marketsmith (that
@@ -1139,8 +1090,8 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
 
         for r in range(2, len(df) + 2):
             sym_cell = f"{sym_col}{r}"
-            row_symbol_value = ws.cell(row=r, column=symbol_col_idx_for_price).value
-            row_price_fields = price_cache.get(str(row_symbol_value).strip(), {}) if row_symbol_value else {}
+            symbol_value = df.iloc[r - 2]["Symbol"] if "Symbol" in df.columns else None
+            row_price_fields = price_cache.get(str(symbol_value).strip(), {}) if symbol_value not in (None, "") else {}
 
             for label, (
                 prefix,
@@ -1173,14 +1124,11 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             for label, days, lookback in (("50 DMA", 50, 75), ("100 DMA", 100, 150), ("200 DMA", 200, 300)):
                 if label in labels:
                     col = labels.index(label) + 1
-                    if label in row_price_fields:
-                        ws.cell(row=r, column=col, value=row_price_fields[label])
-                    else:
-                        formula = (
-                            f'=IFERROR(AVERAGE(QUERY(SORT(GOOGLEFINANCE("NSE:"&{sym_cell},"price",'
-                            f'TODAY()-{lookback},TODAY()),1,0),"select Col2 limit {days}")), "")'
-                        )
-                        ws.cell(row=r, column=col, value=formula)
+                    formula = (
+                        f'=IFERROR(AVERAGE(QUERY(SORT(GOOGLEFINANCE("NSE:"&{sym_cell},"price",'
+                        f'TODAY()-{lookback},TODAY()),1,0),"select Col2 limit {days}")), "")'
+                    )
+                    ws.cell(row=r, column=col, value=formula)
 
             if "Bull/Bear Run Output" in labels and cmp_col and d50_col and d100_col and d200_col:
                 col = labels.index("Bull/Bear Run Output") + 1
@@ -1229,30 +1177,27 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             # not classic Excel). Symbol cell substituted in for every "A2".
             if "CAR Rating" in labels:
                 col = labels.index("CAR Rating") + 1
-                if "CAR Rating" in row_price_fields:
-                    ws.cell(row=r, column=col, value=row_price_fields["CAR Rating"])
-                else:
-                    car_template = (
-                        '=IFERROR(IF(__S__="","ENTER STOCK",'
-                        'LET('
-                        'raw_high, GOOGLEFINANCE("NSE:" & __S__, "high", TODAY()-365, TODAY()),'
-                        'high_date, IFERROR(TO_DATE(QUERY(raw_high, "SELECT Col1 WHERE Col2 IS NOT NULL '
-                        'ORDER BY Col2 DESC LIMIT 1 LABEL Col1 \'\'", 1)), TODAY()-30),'
-                        'raw_data, IFERROR(GOOGLEFINANCE("NSE:" & __S__, "close", high_date, TODAY()), '
-                        'GOOGLEFINANCE("NSE:" & __S__, "close", TODAY()-10, TODAY())),'
-                        'prices, IFERROR(CHOOSEROWS(INDEX(raw_data, 0, 2), SEQUENCE(ROWS(raw_data)-1, 1, 2, 1)), {0}),'
-                        'count_rows, ROWS(prices),'
-                        'cum_avg, SCAN(0, SEQUENCE(count_rows), LAMBDA(a,n, AVERAGE(CHOOSEROWS(prices, SEQUENCE(n))))),'
-                        'last_10, IF(count_rows < 10, {0;0;0;0;0;0;0;0;0;0}, '
-                        'CHOOSEROWS(cum_avg, SEQUENCE(10, 1, count_rows - 9, 1))),'
-                        'check, SUMPRODUCT(--(CHOOSEROWS(last_10, SEQUENCE(9, 1, 2, 1)) > '
-                        'CHOOSEROWS(last_10, SEQUENCE(9, 1, 1, 1)))),'
-                        'IF(count_rows < 10, "\u26aa Short History", IF(check = 9, '
-                        '"\U0001f7e2 Buy/Average Out", "Avoid/Hold \U0001f534"))'
-                        ')), "TICKER NOT FOUND")'
-                    )
-                    formula = car_template.replace("__S__", sym_cell)
-                    ws.cell(row=r, column=col, value=formula)
+                car_template = (
+                    '=IFERROR(IF(__S__="","ENTER STOCK",'
+                    'LET('
+                    'raw_high, GOOGLEFINANCE("NSE:" & __S__, "high", TODAY()-365, TODAY()),'
+                    'high_date, IFERROR(TO_DATE(QUERY(raw_high, "SELECT Col1 WHERE Col2 IS NOT NULL '
+                    'ORDER BY Col2 DESC LIMIT 1 LABEL Col1 \'\'", 1)), TODAY()-30),'
+                    'raw_data, IFERROR(GOOGLEFINANCE("NSE:" & __S__, "close", high_date, TODAY()), '
+                    'GOOGLEFINANCE("NSE:" & __S__, "close", TODAY()-10, TODAY())),'
+                    'prices, IFERROR(CHOOSEROWS(INDEX(raw_data, 0, 2), SEQUENCE(ROWS(raw_data)-1, 1, 2, 1)), {0}),'
+                    'count_rows, ROWS(prices),'
+                    'cum_avg, SCAN(0, SEQUENCE(count_rows), LAMBDA(a,n, AVERAGE(CHOOSEROWS(prices, SEQUENCE(n))))),'
+                    'last_10, IF(count_rows < 10, {0;0;0;0;0;0;0;0;0;0}, '
+                    'CHOOSEROWS(cum_avg, SEQUENCE(10, 1, count_rows - 9, 1))),'
+                    'check, SUMPRODUCT(--(CHOOSEROWS(last_10, SEQUENCE(9, 1, 2, 1)) > '
+                    'CHOOSEROWS(last_10, SEQUENCE(9, 1, 1, 1)))),'
+                    'IF(count_rows < 10, "\u26aa Short History", IF(check = 9, '
+                    '"\U0001f7e2 Buy/Average Out", "Avoid/Hold \U0001f534"))'
+                    ')), "TICKER NOT FOUND")'
+                )
+                formula = car_template.replace("__S__", sym_cell)
+                ws.cell(row=r, column=col, value=formula)
 
             # ================================================================
             # New calculated columns (instruction_word_file_for_add_column.docx)
@@ -1279,23 +1224,35 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
 
             # 20 Days Highest High — doc: "paste as it without thinking":
             # =MAX(QUERY(SORT(GOOGLEFINANCE(A2,"high",TODAY()-40,TODAY()),1,0),"select Col2 limit 20"))
+            # Fast path: a Python-precomputed value (see fetch_new_columns_price_data)
+            # is written as a plain number instead — same result, no live
+            # GOOGLEFINANCE recalculation. Falls back to the formula if missing.
             if d20high_col:
                 col = labels.index("20 Days Highest High") + 1
-                formula = (
-                    f'=MAX(QUERY(SORT(GOOGLEFINANCE("NSE:"&{sym_cell},"high",'
-                    f'TODAY()-40,TODAY()),1,0),"select Col2 limit 20"))'
-                )
-                ws.cell(row=r, column=col, value=formula)
+                precomputed = row_price_fields.get("20d_high")
+                if precomputed is not None:
+                    ws.cell(row=r, column=col, value=round(precomputed, 2))
+                else:
+                    formula = (
+                        f'=MAX(QUERY(SORT(GOOGLEFINANCE("NSE:"&{sym_cell},"high",'
+                        f'TODAY()-40,TODAY()),1,0),"select Col2 limit 20"))'
+                    )
+                    ws.cell(row=r, column=col, value=formula)
 
             # 20 Days low — doc: "paste as it without thinking":
             # =MIN(QUERY(SORT(GOOGLEFINANCE(A2,"low",TODAY()-40,TODAY()),1,0),"select Col2 limit 20"))
+            # Fast path: precomputed plain value (see 20 Days Highest High above).
             if d20low_col:
                 col = labels.index("20 Days low") + 1
-                formula = (
-                    f'=MIN(QUERY(SORT(GOOGLEFINANCE("NSE:"&{sym_cell},"low",'
-                    f'TODAY()-40,TODAY()),1,0),"select Col2 limit 20"))'
-                )
-                ws.cell(row=r, column=col, value=formula)
+                precomputed = row_price_fields.get("20d_low")
+                if precomputed is not None:
+                    ws.cell(row=r, column=col, value=round(precomputed, 2))
+                else:
+                    formula = (
+                        f'=MIN(QUERY(SORT(GOOGLEFINANCE("NSE:"&{sym_cell},"low",'
+                        f'TODAY()-40,TODAY()),1,0),"select Col2 limit 20"))'
+                    )
+                    ws.cell(row=r, column=col, value=formula)
 
             # 20 Days Output = IF(20 Days low = Low (Rs.), "🟢 Start GTT order at
             # 20 days high and update regularly", "🔴 Do not wait for best time")
@@ -1311,13 +1268,18 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
 
             # 25 Days Low — doc: "paste as it without thinking":
             # =MIN(QUERY(SORT(GOOGLEFINANCE(A2,"low",TODAY()-40,TODAY()),1,0),"select Col2 limit 25"))
+            # Fast path: precomputed plain value (see 20 Days Highest High above).
             if d25low_col:
                 col = labels.index("25 Days Low") + 1
-                formula = (
-                    f'=MIN(QUERY(SORT(GOOGLEFINANCE("NSE:"&{sym_cell},"low",'
-                    f'TODAY()-40,TODAY()),1,0),"select Col2 limit 25"))'
-                )
-                ws.cell(row=r, column=col, value=formula)
+                precomputed = row_price_fields.get("25d_low")
+                if precomputed is not None:
+                    ws.cell(row=r, column=col, value=round(precomputed, 2))
+                else:
+                    formula = (
+                        f'=MIN(QUERY(SORT(GOOGLEFINANCE("NSE:"&{sym_cell},"low",'
+                        f'TODAY()-40,TODAY()),1,0),"select Col2 limit 25"))'
+                    )
+                    ws.cell(row=r, column=col, value=formula)
 
             # Our GTT Price = 25 Days Low x 1.05 — doc formula: =AT2*1.05
             if gtt_col and d25low_col:
@@ -1340,23 +1302,33 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
 
             # Last 6 Month Minimum*1.20 — doc: "paste as it without thinking":
             # =MIN(INDEX(GOOGLEFINANCE(A2,"ALL",TODAY()-180,TODAY()),0,5))*1.2
+            # Fast path: precomputed plain value (see 20 Days Highest High above).
             if min6mo_col:
                 col = labels.index("Last 6 Month Minimum*1.20") + 1
-                formula = (
-                    f'=MIN(INDEX(GOOGLEFINANCE("NSE:"&{sym_cell},"ALL",'
-                    f'TODAY()-180,TODAY()),0,5))*1.2'
-                )
-                ws.cell(row=r, column=col, value=formula)
+                precomputed = row_price_fields.get("min6mo")
+                if precomputed is not None:
+                    ws.cell(row=r, column=col, value=round(precomputed, 2))
+                else:
+                    formula = (
+                        f'=MIN(INDEX(GOOGLEFINANCE("NSE:"&{sym_cell},"ALL",'
+                        f'TODAY()-180,TODAY()),0,5))*1.2'
+                    )
+                    ws.cell(row=r, column=col, value=formula)
 
             # 100 SMA — doc: "paste as it without thinking":
             # =AVERAGE(QUERY(SORT(GOOGLEFINANCE(A2,"price",TODAY()-320,TODAY()),1,0),"select Col2 limit 100"))
+            # Fast path: precomputed plain value (see 20 Days Highest High above).
             if sma100_col:
                 col = labels.index("100 SMA") + 1
-                formula = (
-                    f'=AVERAGE(QUERY(SORT(GOOGLEFINANCE("NSE:"&{sym_cell},"price",'
-                    f'TODAY()-320,TODAY()),1,0),"select Col2 limit 100"))'
-                )
-                ws.cell(row=r, column=col, value=formula)
+                precomputed = row_price_fields.get("sma100")
+                if precomputed is not None:
+                    ws.cell(row=r, column=col, value=round(precomputed, 2))
+                else:
+                    formula = (
+                        f'=AVERAGE(QUERY(SORT(GOOGLEFINANCE("NSE:"&{sym_cell},"price",'
+                        f'TODAY()-320,TODAY()),1,0),"select Col2 limit 100"))'
+                    )
+                    ws.cell(row=r, column=col, value=formula)
 
             # 100 SMA Output = IF(AND(CMP > 100 SMA, CMP > Last 6 Month
             # Minimum*1.20, Prev Close < 100 SMA), "🟢 Buy Today", "🔴 Do Not Buy")
@@ -2814,9 +2786,29 @@ if all_candidate_files or custom_tab_files:
                 master_hide_columns = (
                     MASTER_HIDE_COLUMNS if st.session_state.get("master_hide_cols_toggle") else None
                 )
+
+                # Fast local computation for the 20/25 Days & 100 SMA / Last 6
+                # Month Minimum columns (feature request: GOOGLEFINANCE is slow
+                # to open in Google Sheets) — fetched ONCE here for every symbol
+                # in this run, then reused for both the combined workbook below
+                # and the Master_Dashboard-8-only workbook further down.
+                if not YFINANCE_AVAILABLE:
+                    st.warning(
+                        "⚠️ 'yfinance' isn't installed, so 20 Days Highest High / "
+                        "20 Days low / 25 Days Low / 100 SMA / Last 6 Month "
+                        "Minimum*1.20 will use the original (slower) GOOGLEFINANCE "
+                        "formulas instead of fast Python-computed values. Run "
+                        "`pip install yfinance` to enable the fast path."
+                    )
+                master_symbols_tuple = tuple(sorted({
+                    str(s).strip() for s in master_df["Symbol"] if s and str(s).strip()
+                })) if "Symbol" in master_df.columns else ()
+                new_cols_price_data = fetch_new_columns_price_data(master_symbols_tuple)
+
                 md_write_master_sheet(
                     writer.book, master_df, column_order=active_master_order,
                     field_map=exec_field_map, hide_columns=master_hide_columns,
+                    precomputed_price_data=new_cols_price_data,
                 )
 
             # ---------------------------------------------------------------------
@@ -2830,6 +2822,7 @@ if all_candidate_files or custom_tab_files:
             md_write_master_sheet(
                 master_only_wb, master_df, column_order=active_master_order,
                 field_map=exec_field_map, hide_columns=master_hide_columns,
+                precomputed_price_data=new_cols_price_data,
             )
             master_only_stream = io.BytesIO()
             master_only_wb.save(master_only_stream)
