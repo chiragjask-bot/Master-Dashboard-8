@@ -424,11 +424,7 @@ NUMBER_FORMATS = {
 #     Consolidation", right after all tabs are written into the same workbook.
 # =====================================================================================
 MASTER_SHEET_NAME = "Master_Dashboard-8"
-MASTER_HIGHLIGHT_COLOR = "1F4E79"        # Design refresh: navy header (was "eef6ff")
-MASTER_HEADER_FONT_COLOR = "FFFFFF"      # Design refresh: white header text on navy
-MASTER_BAND_FILL_COLOR = "F5F7FA"        # Design refresh: light zebra-stripe fill on even rows
-MASTER_BORDER_COLOR = "D9D9D9"           # Design refresh: softer, lower-contrast border gray
-MASTER_TAB_COLOR = "1F4E79"              # Design refresh: sheet tab color to match header
+MASTER_HIGHLIGHT_COLOR = "eef6ff"
 MASTER_HEADER_SCAN_ROWS = 15
 MASTER_SYMBOL_ALIASES = ["SYMBOL", "TckrSymb", "Symb", "Symbol"]
 # Safety cap: one Data Validation object is created per row for the Symbol
@@ -964,19 +960,16 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
     formats = [MASTER_NUMBER_FORMATS.get(field_lookup[l]["format"], "@") for l in labels]
 
     header_fill = PatternFill(start_color=MASTER_HIGHLIGHT_COLOR, end_color=MASTER_HIGHLIGHT_COLOR, fill_type="solid")
-    bold_font = Font(name="Arial", bold=True, color=MASTER_HEADER_FONT_COLOR)  # Design refresh: white-on-navy header
+    bold_font = Font(name="Arial", bold=True)
     body_font = Font(name="Arial")
-    thin = Side(style="thin", color=MASTER_BORDER_COLOR)  # Design refresh: softer border gray
+    thin = Side(style="thin", color="CCCCCC")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
-    band_fill = PatternFill(start_color=MASTER_BAND_FILL_COLOR, end_color=MASTER_BAND_FILL_COLOR, fill_type="solid")  # Design refresh: zebra striping
-
-    ws.row_dimensions[1].height = 28  # Design refresh: taller, easier-to-read header row
 
     for c, label in enumerate(labels, start=1):
         cell = ws.cell(row=1, column=c, value=label)
         cell.fill = header_fill
         cell.font = bold_font
-        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.alignment = Alignment(horizontal="center")
         cell.border = border
 
     for r, row in enumerate(df.itertuples(index=False), start=2):
@@ -997,8 +990,6 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             cell.font = body_font
             cell.number_format = formats[c - 1]
             cell.border = border
-            if r % 2 == 0:  # Design refresh: zebra striping on even rows for readability
-                cell.fill = band_fill
 
     # ---- Live-formula columns (feature request: "just paste it below formula
     # in excel", DMA/Bull-Bear/Difference/CAR + all 7 hyperlink columns). Written
@@ -1735,37 +1726,6 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             comment.width = 260
             comment.height = 130
             symbol_cell.comment = comment
-
-    # ---- Design refresh: sheet tab color, matching the navy header theme.
-    ws.sheet_properties.tabColor = MASTER_TAB_COLOR
-
-    # ---- Design refresh: print setup — landscape, fit-to-width, header row
-    # repeats on every printed/PDF page (useful given how wide this sheet is).
-    ws.page_setup.orientation = "landscape"
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0
-    ws.sheet_properties.pageSetUpPr.fitToPage = True
-    ws.print_title_rows = "1:1"
-
-    # ---- Design refresh: collapsible column group for the 11 new signal
-    # columns (instruction_word_file_for_add_column.docx block), so they can
-    # be collapsed to a single "+" toggle instead of scrolling past them.
-    # Pure Excel outline/grouping — doesn't hide, reorder, or touch any data.
-    _new_signal_cols = [
-        "% from 52W High", "% from 52W Low", "20 Days Highest High", "20 Days low",
-        "20 Days Output", "25 Days Low", "Our GTT Price", "25 Days Output",
-        "Last 6 Month Minimum*1.20", "100 SMA", "100 SMA Output",
-    ]
-    _group_letters = [
-        ws.cell(row=1, column=labels.index(lbl) + 1).column_letter
-        for lbl in _new_signal_cols if lbl in labels
-    ]
-    if _group_letters:
-        # NOTE: outline level 1 is already used by the existing MASTER_HIDE_COLUMNS
-        # hide/unhide toggle above — using level 2 here creates a separate, nested
-        # "+/-" box for just these 11 columns instead of merging into that toggle.
-        for col_letter in _group_letters:
-            ws.column_dimensions[col_letter].outlineLevel = 2
 
     # Move it to the front so it's the first thing a reviewer sees, right after Main Tab.
     wb.move_sheet(MASTER_SHEET_NAME, offset=-(len(wb.sheetnames) - 2))
