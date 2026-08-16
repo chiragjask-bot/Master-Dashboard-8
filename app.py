@@ -927,6 +927,71 @@ def md_build_master_dashboard(wb, field_map=None):
     return df, log
 
 
+# Matches =HYPERLINK("<url>", <display-expression>) and captures just the
+# <display-expression> part (the second argument) — that's the only part of
+# the formula that's ever actually shown in the cell; the URL itself never is.
+_MD_HYPERLINK_RE = re.compile(r'HYPERLINK\(\s*"(?:[^"]|"")*"\s*,\s*(.*)\)\s*$', re.IGNORECASE)
+
+MD_AUTOFIT_MIN_WIDTH = 8
+MD_AUTOFIT_MAX_WIDTH = 45
+MD_AUTOFIT_PADDING = 2
+
+
+def _md_estimate_cell_display_len(value):
+    """Best-effort estimate of how many characters wide a single cell's
+    *displayed* content is — used to approximate Excel AutoFit column widths
+    without needing Excel itself to render anything (see
+    md_compute_autofit_widths). Plain values are just measured directly.
+    Formula cells need special handling because the raw formula string is a
+    poor stand-in for what actually shows on screen:
+      - HYPERLINK formulas display only their 2nd argument (a short label,
+        e.g. a dot/symbol), never the long URL in the 1st argument — so only
+        that part is measured.
+      - Other formulas (e.g. the Buy Today / Do Not Buy style outputs) are
+        approximated by the longest quoted text literal inside them — that's
+        the longest thing the formula can actually resolve to on screen —
+        ignoring any literal that looks like a URL/long constant, plus a
+        small allowance per "&" concatenation for whatever dynamic text
+        (e.g. an appended Symbol) gets glued on.
+    """
+    if value is None:
+        return 0
+    if isinstance(value, str) and value.startswith("="):
+        m = _MD_HYPERLINK_RE.search(value)
+        if m:
+            display_expr = m.group(1)
+            literals = re.findall(r'"([^"]*)"', display_expr)
+            lit_len = sum(len(s) for s in literals)
+            concat_allowance = display_expr.count("&") * 6
+            return max(lit_len + concat_allowance, 4)
+        literals = [s for s in re.findall(r'"([^"]*)"', value) if len(s) <= 25]
+        base_len = max((len(s) for s in literals), default=8)
+        return base_len + value.count("&") * 3
+    return len(str(value))
+
+
+def md_compute_autofit_widths(ws, labels):
+    """Scans every cell already written to a Master_Dashboard-8 worksheet and
+    returns {column_index: width} sized to fit each column's content — the
+    automatic, no-macro-needed approximation of Excel AutoFit described above
+    md_write_master_sheet's column-width loop. Must be called AFTER all data/
+    formulas for the sheet have been written (widths are computed from what's
+    actually in the cells at call time).
+    """
+    max_row = ws.max_row
+    widths = {}
+    for c, label in enumerate(labels, start=1):
+        header_len = len(str(label)) if label else 0
+        max_len = header_len
+        for r in range(2, max_row + 1):
+            cell_len = _md_estimate_cell_display_len(ws.cell(row=r, column=c).value)
+            if cell_len > max_len:
+                max_len = cell_len
+        width = max(MD_AUTOFIT_MIN_WIDTH, min(max_len + MD_AUTOFIT_PADDING, MD_AUTOFIT_MAX_WIDTH))
+        widths[c] = width
+    return widths
+
+
 def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_columns=None,
                            precomputed_price_data=None):
     """Adds/overwrites Master_Dashboard-8 directly on the same workbook object.
@@ -1356,18 +1421,23 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
     ws.sheet_properties.outlinePr.summaryRight = True
     ws.sheet_view.showOutlineSymbols = True
 
-    # ---- Column width note (feature request: "auto adjust column width" /
-    # "AutoFit"). openpyxl has NO way to compute a real rendered-text AutoFit
-    # width (that calculation depends on Excel's actual font-rendering engine,
-    # which openpyxl doesn't have) — it can only ever set a fixed guess. The
-    # width below is that fixed starting guess. For a REAL Excel AutoFit
-    # (identical to double-clicking a column border) on this tab, run the
-    # "AutoFitSelectedColumns" VBA macro described in EXCEL_MACRO_SETUP.md —
-    # it calls Worksheets("Master_Dashboard-8").Columns("A:CC").AutoFit and
-    # only ever touches this one tab.
+    # ---- Auto-adjust column width (feature request: "auto adjust column
+    # width" / "AutoFit"). openpyxl has no way to run Excel's real rendered-
+    # text AutoFit (that calculation depends on Excel's own font-rendering
+    # engine, which only exists inside Excel itself), so instead we compute a
+    # close approximation ourselves: measure the longest thing that will
+    # actually be *displayed* in each column — header text, plain values, and
+    # (for formula cells like the HYPERLINK link columns and the Buy/Don't-Buy
+    # style output columns) the longest text the formula can actually show,
+    # not the raw formula string — and size the column to fit that. This runs
+    # automatically on every export, so no manual VBA/macro step is needed.
+    # (EXCEL_MACRO_SETUP.md's AutoFitSelectedColumns macro still works too, if
+    # a pixel-exact Excel-native AutoFit is ever wanted on top of this.)
+    col_widths = md_compute_autofit_widths(ws, labels)
+
     for c in range(1, len(labels) + 1):
         col_letter = ws.cell(row=1, column=c).column_letter
-        ws.column_dimensions[col_letter].width = 20
+        ws.column_dimensions[col_letter].width = col_widths.get(c, 20)
         label_norm = md_normalize_header(labels[c - 1])
         if label_norm in group_norm:
             ws.column_dimensions[col_letter].outlineLevel = 1
@@ -1397,7 +1467,9 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
             # this narrows that column's display width too — there's no way in
             # Excel to resize just the +/- box without also resizing the column
             # it sits in.
-            ws.column_dimensions[boundary_letter].width = 20 * MASTER_HIDE_BUTTON_WIDTH_SCALE
+            ws.column_dimensions[boundary_letter].width = (
+                col_widths.get(boundary_col, 20) * MASTER_HIDE_BUTTON_WIDTH_SCALE
+            )
             run_start = None
 
     # Freeze the header row + Symbol + the pinned NSE Chart dot column (feature
