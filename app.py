@@ -482,9 +482,9 @@ MASTER_FIELD_MAP = [
     {"label": "Close Price", "sheet": "BhavCopy_NSE_CM", "aliases": ["ClsPric", "CLOSE PRICE", "Close Price", "CLOSE_PRICE"], "format": "price"},
     {"label": "CMP/LTP", "sheet": "BhavCopy_NSE_CM", "aliases": ["LastPric", "LAST PRICE", "Last Price", "LTP", "LAST_PRICE"], "format": "price"},
     {"label": "Prev Close", "sheet": "BhavCopy_NSE_CM", "aliases": ["PrvsClsgPric", "PREV CLOSE", "Previous close", "PREV_CL_PR", "PREV_CLOSE"], "format": "price"},
-    {"label": "Open (Rs.)", "sheet": "BhavCopy_NSE_CM", "aliases": ["OpnPric", "Open Price", "OPEN PRICE", "OPEN_PRICE"], "format": "price"},
-    {"label": "High (Rs.)", "sheet": "BhavCopy_NSE_CM", "aliases": ["HghPric", "HIGH PRICE", "High Price", "HIGH_PRICE"], "format": "price"},
-    {"label": "Low (Rs.)", "sheet": "BhavCopy_NSE_CM", "aliases": ["LwPric", "Low Price", "LOW PRICE", "LOW_PRICE"], "format": "price"},
+    {"label": "Open", "sheet": "BhavCopy_NSE_CM", "aliases": ["OpnPric", "Open Price", "OPEN PRICE", "OPEN_PRICE"], "format": "price"},
+    {"label": "High", "sheet": "BhavCopy_NSE_CM", "aliases": ["HghPric", "HIGH PRICE", "High Price", "HIGH_PRICE"], "format": "price"},
+    {"label": "Low", "sheet": "BhavCopy_NSE_CM", "aliases": ["LwPric", "Low Price", "LOW PRICE", "LOW_PRICE"], "format": "price"},
     {"label": "52W High", "sheet": "CM_52_wk_High_low",
      "aliases": ["Adjusted_52_Week_High", "52_Week_High", "52W_High", "52 Week High", "52W High", "HI_52_WK"], "format": "price"},
     {"label": "52W High Date", "sheet": "CM_52_wk_High_low",
@@ -544,7 +544,7 @@ MASTER_FIELD_MAP = [
     #   % from 52W Low            = ((CMP - 52W Low) / 52W Low) * 100
     #   20 Days Highest High      = highest "high" over the last 20 trading days
     #   20 Days low               = lowest "low" over the last 20 trading days
-    #   20 Days Output            = IF(20 Days low = Low (Rs.), "🟢 Start GTT
+    #   20 Days Output            = IF(20 Days low = Low, "🟢 Start GTT
     #                                order at 20 days high and update regularly",
     #                                "🔴 Do not wait for best time")
     #   25 Days Low                = lowest "low" over the last 25 trading days
@@ -668,9 +668,9 @@ MASTER_HIDE_COLUMNS = [
     "Value (Cr.)",
     "Volume (Lakh)",
     "Band",
-    "Open (Rs.)",
-    "High (Rs.)",
-    "Low (Rs.)",
+    "Open",
+    "High",
+    "Low",
     "T0 Effective Date",
     "Symbol P/E",
     "Paid Up Value",
@@ -1072,7 +1072,7 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
         high52date_col_f = ws.cell(row=1, column=labels.index("52W High Date") + 1).column_letter if "52W High Date" in labels else None
         local52_col_f = ws.cell(row=1, column=labels.index("52W Local") + 1).column_letter if "52W Local" in labels else None
         high52_col_f = ws.cell(row=1, column=labels.index("52W High") + 1).column_letter if "52W High" in labels else None
-        low_rs_col_f = ws.cell(row=1, column=labels.index("Low (Rs.)") + 1).column_letter if "Low (Rs.)" in labels else None
+        low_rs_col_f = ws.cell(row=1, column=labels.index("Low") + 1).column_letter if "Low" in labels else None
         prevclose_col_f = ws.cell(row=1, column=labels.index("Prev Close") + 1).column_letter if "Prev Close" in labels else None
 
         # ---- New calculated columns (instruction_word_file_for_add_column.docx)
@@ -1319,7 +1319,7 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
                     )
                     ws.cell(row=r, column=col, value=formula)
 
-            # 20 Days Output = IF(20 Days low = Low (Rs.), "🟢 Start GTT order at
+            # 20 Days Output = IF(20 Days low = Low, "🟢 Start GTT order at
             # 20 days high and update regularly", "🔴 Do not wait for best time")
             # Doc formula: =IF((AQ2=H2),"🟢 ...","🔴 ...")
             if d20out_col and d20low_col and low_rs_col_f:
