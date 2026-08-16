@@ -1356,6 +1356,15 @@ def md_write_master_sheet(wb, df, column_order=None, field_map=None, hide_column
     ws.sheet_properties.outlinePr.summaryRight = True
     ws.sheet_view.showOutlineSymbols = True
 
+    # ---- Column width note (feature request: "auto adjust column width" /
+    # "AutoFit"). openpyxl has NO way to compute a real rendered-text AutoFit
+    # width (that calculation depends on Excel's actual font-rendering engine,
+    # which openpyxl doesn't have) — it can only ever set a fixed guess. The
+    # width below is that fixed starting guess. For a REAL Excel AutoFit
+    # (identical to double-clicking a column border) on this tab, run the
+    # "AutoFitSelectedColumns" VBA macro described in EXCEL_MACRO_SETUP.md —
+    # it calls Worksheets("Master_Dashboard-8").Columns("A:CC").AutoFit and
+    # only ever touches this one tab.
     for c in range(1, len(labels) + 1):
         col_letter = ws.cell(row=1, column=c).column_letter
         ws.column_dimensions[col_letter].width = 20
